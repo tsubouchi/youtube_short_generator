@@ -1,0 +1,25 @@
+# Dependencies
+node_modules/
+__pycache__/
+*.py[cod]
+*$py.class
+.Python
+env/
+venv/
+.env
+
+# Environment Variables
+.env.local
+.env.development
+.env.production
+
+# Vercel
+.vercel
+
+# Project specific
+downloads/
+outputs/
+*.mp3
+*.mp4
+*.wav
+*.m4a
