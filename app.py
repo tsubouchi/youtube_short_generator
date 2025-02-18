@@ -447,7 +447,6 @@ async def index(request: Request):
         "config": {
             "SUPABASE_URL": os.getenv("SUPABASE_URL"),
             "SUPABASE_ANON_KEY": os.getenv("SUPABASE_KEY"),
-            "GOOGLE_CLIENT_ID": os.getenv("GOOGLE_CLIENT_ID"),
             "SITE_URL": site_url
         }
     })

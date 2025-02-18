@@ -145,11 +145,7 @@
                 const { data, error } = await supabaseClient.auth.signInWithOAuth({
                     provider: 'google',
                     options: {
-                        redirectTo: `${SITE_URL}/auth/callback`,
-                        queryParams: {
-                            access_type: 'offline',
-                            prompt: 'consent'
-                        }
+                        redirectTo: '{{ config.SITE_URL }}'  // 環境変数から取得したURLを使用
                     }
                 });
 
@@ -167,9 +163,6 @@
         supabaseClient.auth.onAuthStateChange((event, session) => {
             if (event === 'SIGNED_IN' && session) {
                 updateUserProfile(session.user);
-                if (window.location.hash) {
-                    window.location.href = SITE_URL;
-                }
             } else if (event === 'SIGNED_OUT') {
                 updateUserProfile(null);
             }
