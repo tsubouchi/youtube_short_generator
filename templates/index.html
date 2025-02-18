@@ -1,175 +1,139 @@
 <!DOCTYPE html>
-<html>
+<html lang="ja">
 <head>
-    <title>YouTube 文字起こし & 翻訳</title>
-    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;700&display=swap" rel="stylesheet">
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>YouTube Transcriber</title>
+    <script src="https://cdn.tailwindcss.com"></script>
     <style>
-        body {
-            font-family: 'Noto Sans JP', sans-serif;
-            max-width: 900px;
-            margin: 0 auto;
-            padding: 20px;
-            background-color: #f5f5f5;
-            color: #333;
-        }
-
-        h1 {
-            text-align: center;
-            color: #2c3e50;
-            margin-bottom: 40px;
-            font-size: 2.2em;
-        }
-
-        #processForm {
-            background: white;
-            padding: 25px;
-            border-radius: 10px;
-            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
-            margin-bottom: 30px;
-        }
-
-        input[type="text"] {
-            width: 85%;
-            padding: 12px;
-            border: 2px solid #e0e0e0;
-            border-radius: 6px;
-            font-size: 16px;
-            transition: border-color 0.3s;
-        }
-
-        input[type="text"]:focus {
-            outline: none;
-            border-color: #3498db;
-        }
-
-        button {
-            background-color: #3498db;
-            color: white;
-            border: none;
-            padding: 12px 25px;
-            border-radius: 6px;
-            cursor: pointer;
-            font-size: 16px;
-            transition: background-color 0.3s;
-            margin-left: 10px;
-        }
-
-        button:hover {
-            background-color: #2980b9;
-        }
-
         .loading {
             display: none;
-            text-align: center;
-            padding: 20px;
-            color: #666;
         }
-
-        .loading::after {
-            content: "⌛";
-            margin-left: 8px;
-            animation: rotate 1.5s infinite linear;
-            display: inline-block;
-        }
-
-        .result-box {
-            background: white;
-            margin-top: 25px;
-            padding: 25px;
-            border-radius: 10px;
-            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
-        }
-
-        .result-box h2 {
-            color: #2c3e50;
-            margin-top: 0;
-            padding-bottom: 10px;
-            border-bottom: 2px solid #e0e0e0;
-        }
-
-        #transcription, #translation {
-            line-height: 1.6;
-            padding: 15px 0;
-        }
-
-        @keyframes rotate {
-            from { transform: rotate(0deg); }
-            to { transform: rotate(360deg); }
-        }
-
-        @media (max-width: 768px) {
-            body {
-                padding: 15px;
-            }
-
-            input[type="text"] {
-                width: 100%;
-                margin-bottom: 10px;
-            }
-
-            button {
-                width: 100%;
-                margin-left: 0;
-            }
+        .loading.active {
+            display: block;
         }
     </style>
 </head>
-<body>
-    <h1>🎥 YouTube 文字起こし & 翻訳</h1>
-    
-    <form id="processForm">
-        <input type="text" id="youtube_url" name="youtube_url" 
-               placeholder="YouTube URLを入力してください">
-        <button type="submit">処理開始</button>
-    </form>
+<body class="bg-black text-white min-h-screen">
+    <div class="container mx-auto px-4 py-8">
+        <h1 class="text-4xl font-bold mb-8 text-center">YouTube Transcriber</h1>
+        
+        <!-- 入力フォーム -->
+        <div class="max-w-2xl mx-auto mb-8">
+            <form id="processForm" class="space-y-4">
+                <div>
+                    <input type="text" 
+                           id="youtube_url" 
+                           name="youtube_url" 
+                           placeholder="YouTube URLを入力してください" 
+                           class="w-full p-3 rounded bg-gray-800 text-white border border-gray-700 focus:border-blue-500 focus:outline-none">
+                </div>
+                <div class="flex justify-between items-center">
+                    <div>
+                        <label class="block text-sm mb-2">スクリーンショット数:</label>
+                        <input type="number" 
+                               id="num_screenshots" 
+                               name="num_screenshots" 
+                               value="3" 
+                               min="1" 
+                               max="10" 
+                               class="w-24 p-2 rounded bg-gray-800 text-white border border-gray-700">
+                    </div>
+                    <button type="submit" 
+                            class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-8 rounded transition duration-200">
+                        処理開始
+                    </button>
+                </div>
+            </form>
+        </div>
 
-    <div class="loading">処理中です。しばらくお待ちください...</div>
+        <!-- 結果表示エリア -->
+        <div id="result" class="max-w-4xl mx-auto space-y-8 hidden">
+            <!-- 文字起こし結果 -->
+            <div class="bg-gray-800 rounded-lg p-6">
+                <h2 class="text-xl font-bold mb-4">文字起こし結果</h2>
+                <div id="transcriptionText" class="whitespace-pre-wrap"></div>
+            </div>
 
-    <div class="result-box">
-        <h2>📝 文字起こし結果</h2>
-        <div id="transcription"></div>
-    </div>
+            <!-- 英訳結果 -->
+            <div class="bg-gray-800 rounded-lg p-6">
+                <h2 class="text-xl font-bold mb-4">英訳結果</h2>
+                <div id="translationText" class="whitespace-pre-wrap"></div>
+            </div>
 
-    <div class="result-box">
-        <h2>🌐 英訳結果</h2>
-        <div id="translation"></div>
+            <!-- 最近の処理結果 -->
+            <div class="bg-gray-800 rounded-lg p-6">
+                <h2 class="text-xl font-bold mb-4">最近の処理結果</h2>
+                <div id="recentResults" class="space-y-2">
+                    <!-- 動的に追加される -->
+                </div>
+            </div>
+        </div>
+
+        <!-- ローディング表示 -->
+        <div id="loading" class="loading text-center py-8">
+            <div class="animate-spin rounded-full h-16 w-16 border-b-2 border-blue-500 mx-auto mb-4"></div>
+            <p class="text-gray-400">処理中...</p>
+        </div>
+
+        <!-- エラー表示 -->
+        <div id="error" class="hidden max-w-2xl mx-auto mt-8 bg-red-900 text-white p-4 rounded">
+            <p id="errorMessage"></p>
+        </div>
     </div>
 
     <script>
-        document.getElementById('processForm').onsubmit = async (e) => {
+        document.getElementById('processForm').addEventListener('submit', async (e) => {
             e.preventDefault();
             
-            const loading = document.querySelector('.loading');
-            const transcriptionBox = document.getElementById('transcription');
-            const translationBox = document.getElementById('translation');
+            // UI初期化
+            document.getElementById('loading').classList.add('active');
+            document.getElementById('result').classList.add('hidden');
+            document.getElementById('error').classList.add('hidden');
             
-            loading.style.display = 'block';
-            transcriptionBox.textContent = '';
-            translationBox.textContent = '';
-
             const formData = new FormData();
-            formData.append('youtube_url', 
-                document.getElementById('youtube_url').value);
-
+            formData.append('youtube_url', document.getElementById('youtube_url').value);
+            formData.append('num_screenshots', document.getElementById('num_screenshots').value);
+            
             try {
                 const response = await fetch('/process', {
                     method: 'POST',
                     body: formData
                 });
+                
                 const data = await response.json();
-
+                
                 if (data.success) {
-                    transcriptionBox.textContent = data.transcription;
-                    translationBox.textContent = data.translation;
+                    // 結果の表示
+                    displayResults(data);
                 } else {
-                    alert('エラーが発生しました: ' + data.error);
+                    // エラー表示
+                    showError(data.error);
                 }
             } catch (error) {
-                alert('エラーが発生しました: ' + error);
+                showError('処理中にエラーが発生しました: ' + error.message);
             } finally {
-                loading.style.display = 'none';
+                document.getElementById('loading').classList.remove('active');
             }
-        };
+        });
+
+        function displayResults(data) {
+            // 結果表示エリアを表示
+            document.getElementById('result').classList.remove('hidden');
+            
+            // 文字起こし
+            document.getElementById('transcriptionText').textContent = data.transcription;
+            
+            // 翻訳
+            document.getElementById('translationText').textContent = data.translation;
+        }
+
+        function showError(message) {
+            const errorDiv = document.getElementById('error');
+            const errorMessage = document.getElementById('errorMessage');
+            errorDiv.classList.remove('hidden');
+            errorMessage.textContent = message;
+        }
     </script>
 </body>
 </html> 
