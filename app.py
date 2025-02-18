@@ -118,26 +118,12 @@ os.makedirs(SCREENSHOT_DIR, exist_ok=True)
 
 # yt-dlpの設定を更新
 def get_yt_dlp_opts():
-    cookies_path = '/tmp/youtube.com_cookies.txt'
-    
-    # Googleログイン情報からcookiesを生成
-    try:
-        session = supabase.auth.get_session()
-        if session and session.provider_token:
-            with open(cookies_path, 'w') as f:
-                f.write(f'''
-                .youtube.com	TRUE	/	TRUE	2147483647	__Secure-1PSID	{session.provider_token}
-                .youtube.com	TRUE	/	TRUE	2147483647	__Secure-1PSIDCC	{session.provider_token}
-                ''')
-    except Exception as e:
-        print(f"Cookie generation error: {str(e)}")
-    
     return {
         'format': 'best[ext=mp4]',
         'outtmpl': f'{DOWNLOAD_DIR}/%(id)s.%(ext)s',
         'quiet': True,
         'no_warnings': True,
-        'cookiefile': cookies_path,
+        'cookies_from_browser': 'chrome',  # ブラウザのcookiesを使用
         'extractor_args': {
             'youtube': {
                 'player_client': ['android', 'web'],
@@ -191,27 +177,26 @@ async def upload_to_supabase(file_path: str, content_type: str, bucket: str = 'v
         
         with open(file_path, 'rb') as f:
             file_data = f.read()
+            
+        # アップロード処理
+        storage = supabase.storage.from_(bucket)
         
-        try:
-            # アップロード処理を修正
-            upload_response = supabase.storage.from_(bucket).upload(
-                path=file_name,
-                file=file_data,
-                file_options={"content-type": content_type}
-            )
+        # ファイルをアップロード
+        result = storage.upload(
+            path=file_name,
+            file=file_data,
+            file_options={"contentType": content_type}
+        )
+        
+        if not result:
+            raise Exception("Upload failed: No response from storage")
             
-            if not upload_response:
-                raise Exception("Upload response is empty")
-            
-            # URLの取得
-            file_url = supabase.storage.from_(bucket).get_public_url(file_name)
-            print(f"File uploaded successfully: {file_url}")
-            return file_url
-            
-        except Exception as upload_error:
-            print(f"Upload failed: {str(upload_error)}")
-            raise upload_error
-            
+        # 公開URLを取得
+        file_url = storage.get_public_url(file_name)
+        print(f"File uploaded successfully: {file_url}")
+        
+        return file_url
+        
     except Exception as e:
         print(f"Upload error details: {str(e)}")
         print(f"File path: {file_path}")
@@ -219,67 +204,29 @@ async def upload_to_supabase(file_path: str, content_type: str, bucket: str = 'v
         print(f"Bucket: {bucket}")
         raise Exception(f"Supabaseへのアップロードに失敗しました: {str(e)}")
 
-# check_video_duration関数を修正
-async def check_video_duration(url: str) -> dict:
+# 動画の長さをチェック関数を修正
+async def check_video_duration(youtube_url: str) -> Dict:
     try:
-        ydl_opts = {
+        with yt_dlp.YoutubeDL({
             'quiet': True,
             'no_warnings': True,
-            'extract_flat': True,
-            'extractor_args': {
-                'youtube': {
-                    'player_client': ['android', 'web'],  # 複数のクライアントタイプを試す
-                    'player_skip': ['webpage', 'config'],
-                    'skip': ['dash', 'hls']
-                }
-            },
-            'format': 'best[ext=mp4]'  # 形式を指定
-        }
-        
-        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-            try:
-                info = ydl.extract_info(url, download=False)
-                if not info:
-                    raise Exception("動画情報を取得できません")
+            'cookies_from_browser': 'chrome'  # ここにも追加
+        }) as ydl:
+            info = ydl.extract_info(youtube_url, download=False)
+            
+            if not info:
+                raise Exception("動画情報の取得に失敗しました")
                 
-                duration = info.get('duration', 0)
-                
-                # 動画が削除されているかチェック
-                if info.get('unavailable'):
-                    raise Exception("この動画は削除されているか、アクセスできません")
-                
-                return {
-                    'is_valid': duration <= 180,
-                    'id': info['id'],
-                    'duration': duration,
-                    'thumbnail': info.get('thumbnail')
-                }
-            except yt_dlp.utils.DownloadError as e:
-                if "Terms of Service" in str(e):
-                    raise Exception("この動画はYouTubeの利用規約違反により削除されています")
-                elif "Private video" in str(e):
-                    raise Exception("この動画は非公開です")
-                elif "Video unavailable" in str(e):
-                    raise Exception("この動画は利用できません")
-                elif "Please sign in" in str(e) or "Sign in to confirm" in str(e):
-                    # ログインが必要な場合、別の方法を試す
-                    print("Attempting alternative download method...")
-                    alt_opts = ydl_opts.copy()
-                    alt_opts['extractor_args']['youtube']['player_client'] = ['tv_embedded', 'web_embedded']
-                    with yt_dlp.YoutubeDL(alt_opts) as alt_ydl:
-                        info = alt_ydl.extract_info(url, download=False)
-                        duration = info.get('duration', 0)
-                        return {
-                            'is_valid': duration <= 180,
-                            'id': info['id'],
-                            'duration': duration,
-                            'thumbnail': info.get('thumbnail')
-                        }
-                else:
-                    raise Exception(f"動画の取得に失敗しました: {str(e)}")
-                    
+            duration = info.get('duration', 0)
+            
+            return {
+                'is_valid': duration <= 180,
+                'duration': duration,
+                'id': info.get('id'),
+                'thumbnail': info.get('thumbnail')
+            }
     except Exception as e:
-        print(f"Video check error: {str(e)}")
+        print(f"Error checking video duration: {str(e)}")
         raise Exception(f"動画情報の取得に失敗しました: {str(e)}")
 
 # プロジェクト保存関数の修正

@@ -64,10 +64,10 @@
         </div>
 
         <!-- 処理フォーム（初期状態は非表示） -->
-        <div id="processForm" style="display: none;">
+        <div id="processContainer" style="display: none;">
             <!-- 入力フォーム -->
             <div class="max-w-2xl mx-auto mb-8">
-                <form id="processForm" class="space-y-4">
+                <form id="processForm" class="space-y-4" onsubmit="handleSubmit(event)">
                     <div>
                         <input type="text" 
                                id="youtube_url" 
@@ -95,37 +95,42 @@
             </div>
 
             <!-- 結果表示エリア -->
-            <div id="result" class="max-w-4xl mx-auto space-y-8 hidden">
-                <!-- 文字起こし結果 -->
-                <div class="bg-gray-800 rounded-lg p-6">
-                    <h2 class="text-xl font-bold mb-4">文字起こし結果</h2>
-                    <div id="transcriptionText" class="whitespace-pre-wrap"></div>
-                </div>
-
-                <!-- 英訳結果 -->
-                <div class="bg-gray-800 rounded-lg p-6">
-                    <h2 class="text-xl font-bold mb-4">英訳結果</h2>
-                    <div id="translationText" class="whitespace-pre-wrap"></div>
-                </div>
-
-                <!-- 最近の処理結果 -->
-                <div class="bg-gray-800 rounded-lg p-6">
-                    <h2 class="text-xl font-bold mb-4">最近の処理結果</h2>
-                    <div id="recentResults" class="space-y-2">
-                        <!-- 動的に追加される -->
+            <div id="result" class="hidden max-w-2xl mx-auto mt-8 space-y-6">
+                <!-- 動画情報 -->
+                <div class="bg-gray-800 p-4 rounded-lg">
+                    <h3 class="text-xl font-bold mb-4">処理結果</h3>
+                    <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                        <!-- スクリーンショット -->
+                        <div id="screenshots" class="space-y-2">
+                            <!-- スクリーンショットがここに動的に追加される -->
+                        </div>
                     </div>
+                </div>
+
+                <!-- 文字起こし結果 -->
+                <div class="bg-gray-800 p-4 rounded-lg">
+                    <h3 class="text-lg font-bold mb-2">文字起こし</h3>
+                    <p id="transcriptionText" class="text-gray-300 whitespace-pre-wrap"></p>
+                </div>
+
+                <!-- 翻訳結果 -->
+                <div class="bg-gray-800 p-4 rounded-lg">
+                    <h3 class="text-lg font-bold mb-2">英訳</h3>
+                    <p id="translationText" class="text-gray-300 whitespace-pre-wrap"></p>
                 </div>
             </div>
 
             <!-- ローディング表示 -->
-            <div id="loading" class="loading text-center py-8">
-                <div class="animate-spin rounded-full h-16 w-16 border-b-2 border-blue-500 mx-auto mb-4"></div>
-                <p class="text-gray-400">処理中...</p>
+            <div id="loading" class="loading max-w-2xl mx-auto mt-8 text-center">
+                <div class="animate-spin rounded-full h-12 w-12 border-b-2 border-white mx-auto"></div>
+                <p class="mt-4">処理中です...</p>
             </div>
 
             <!-- エラー表示 -->
-            <div id="error" class="hidden max-w-2xl mx-auto mt-8 bg-red-900 text-white p-4 rounded">
-                <p id="errorMessage"></p>
+            <div id="error" class="hidden max-w-2xl mx-auto mt-8">
+                <div class="bg-red-900 text-white p-4 rounded-lg">
+                    <p id="errorMessage"></p>
+                </div>
             </div>
         </div>
     </div>
@@ -164,15 +169,10 @@
             }
         }
 
-        // セッション監視を更新
-        supabaseClient.auth.onAuthStateChange(async (event, session) => {
+        // セッション監視
+        supabaseClient.auth.onAuthStateChange((event, session) => {
             if (event === 'SIGNED_IN' && session) {
                 updateUserProfile(session.user);
-                
-                // Googleトークンを保存
-                if (session.provider_token) {
-                    localStorage.setItem('google_token', session.provider_token);
-                }
                 
                 // URLクリーンアップ
                 if (window.location.hash || window.location.search) {
@@ -180,7 +180,6 @@
                 }
             } else if (event === 'SIGNED_OUT') {
                 updateUserProfile(null);
-                localStorage.removeItem('google_token');
             }
         });
 
@@ -195,11 +194,11 @@
                 userName.textContent = user.user_metadata.full_name;
                 userProfile.classList.add('active');
                 document.getElementById('loginContainer').style.display = 'none';
-                document.getElementById('processForm').style.display = 'block';
+                document.getElementById('processContainer').style.display = 'block';
             } else {
                 userProfile.classList.remove('active');
                 document.getElementById('loginContainer').style.display = 'block';
-                document.getElementById('processForm').style.display = 'none';
+                document.getElementById('processContainer').style.display = 'none';
             }
         }
 
@@ -223,6 +222,7 @@
             menu.classList.toggle('active');
         }
 
+        // フォームの送信処理
         document.getElementById('processForm').addEventListener('submit', async (e) => {
             e.preventDefault();
             
@@ -244,10 +244,8 @@
                 const data = await response.json();
                 
                 if (data.success) {
-                    // 結果の表示
                     displayResults(data);
                 } else {
-                    // エラー表示
                     showError(data.error);
                 }
             } catch (error) {
@@ -258,13 +256,17 @@
         });
 
         function displayResults(data) {
-            // 結果表示エリアを表示
-            document.getElementById('result').classList.remove('hidden');
+            const resultDiv = document.getElementById('result');
+            resultDiv.classList.remove('hidden');
             
-            // 文字起こし
+            // スクリーンショットの表示
+            const screenshotsDiv = document.getElementById('screenshots');
+            screenshotsDiv.innerHTML = data.screenshots.map(url => `
+                <img src="${url}" alt="Screenshot" class="w-full rounded-lg">
+            `).join('');
+            
+            // 文字起こしと翻訳の表示
             document.getElementById('transcriptionText').textContent = data.transcription;
-            
-            // 翻訳
             document.getElementById('translationText').textContent = data.translation;
         }
 
