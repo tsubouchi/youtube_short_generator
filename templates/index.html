@@ -293,15 +293,33 @@
             const { data, error } = await supabaseClient.auth.signInWithOAuth({
                 provider: 'google',
                 options: {
-                    redirectTo: window.location.origin
+                    redirectTo: window.location.origin + '/auth/callback',
+                    queryParams: {
+                        access_type: 'offline',
+                        prompt: 'consent'
+                    },
+                    skipBrowserRedirect: true  // ブラウザリダイレクトをスキップ
                 }
             });
 
             if (error) {
                 console.error('Error:', error.message);
                 alert('ログインに失敗しました: ' + error.message);
+            } else if (data?.url) {
+                window.location.href = data.url;  // 認証URLに直接リダイレクト
             }
         }
+
+        // ハッシュパラメータをチェック
+        window.addEventListener('load', async () => {
+            if (window.location.hash) {
+                const { data: { session }, error } = await supabaseClient.auth.getSession();
+                if (session) {
+                    // セッションが存在する場合、ハッシュを削除してリダイレクト
+                    window.location.href = window.location.origin + window.location.pathname;
+                }
+            }
+        });
     </script>
 </body>
 </html> 

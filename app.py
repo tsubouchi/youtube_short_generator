@@ -574,6 +574,16 @@ async def auth_callback(request: Request):
         refresh_token = request.cookies.get("sb-refresh-token")
         
         if not access_token:
+            # ハッシュパラメータがある場合は処理
+            if "#" in str(request.url):
+                return templates.TemplateResponse("index.html", {
+                    "request": request,
+                    "config": {
+                        "SUPABASE_URL": os.getenv("SUPABASE_URL"),
+                        "SUPABASE_ANON_KEY": os.getenv("SUPABASE_KEY"),
+                        "GOOGLE_CLIENT_ID": os.getenv("GOOGLE_CLIENT_ID")
+                    }
+                })
             raise HTTPException(status_code=401, detail="No session token")
             
         return RedirectResponse(url="/")
