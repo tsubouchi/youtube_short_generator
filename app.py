@@ -1,7 +1,7 @@
 # FastAPI関連
 from fastapi import FastAPI, Request, Form
 from fastapi.templating import Jinja2Templates
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 
 # 外部ライブラリ
@@ -24,21 +24,30 @@ import asyncio
 from io import BytesIO
 from datetime import datetime, timezone
 from typing import Optional, List, Dict
+from fastapi import HTTPException
 
 # 環境変数の読み込みと検証を関数化
 def load_environment():
-    load_dotenv()
+    load_dotenv('.env.development')  # 明示的に.env.developmentを読み込む
     
     required_vars = {
         'SUPABASE_URL': os.getenv('SUPABASE_URL'),
         'SUPABASE_KEY': os.getenv('SUPABASE_KEY'),
         'OPENAI_API_KEY': os.getenv('OPENAI_API_KEY'),
-        'AI_MODEL': os.getenv('AI_MODEL', 'gpt-4o-mini-2024-07-18')
+        'AI_MODEL': os.getenv('AI_MODEL', 'gpt-4o-mini-2024-07-18'),
+        'GOOGLE_CLIENT_ID': os.getenv('GOOGLE_CLIENT_ID'),
+        'GOOGLE_CLIENT_SECRET': os.getenv('GOOGLE_CLIENT_SECRET')
     }
     
+    # 必須の環境変数が設定されているか確認
     missing_vars = [k for k, v in required_vars.items() if not v]
     if missing_vars:
         raise ValueError(f"Missing required environment variables: {', '.join(missing_vars)}")
+    
+    print("Loaded environment variables:", {
+        k: v[:10] + '...' if v and len(v) > 10 else v 
+        for k, v in required_vars.items()
+    })
     
     return required_vars
 
@@ -432,12 +441,19 @@ async def log_processing_status(video_id: str, status: str, message: Optional[st
 
 @app.get("/")
 async def index(request: Request):
+    client_id = os.getenv("GOOGLE_CLIENT_ID")
+    print(f"Base URL: {request.base_url}")
+    print(f"Google Client ID: {client_id}")
+    
+    if not client_id:
+        raise HTTPException(status_code=500, detail="Google Client ID is not set")
+        
     return templates.TemplateResponse("index.html", {
         "request": request,
         "config": {
             "SUPABASE_URL": os.getenv("SUPABASE_URL"),
             "SUPABASE_ANON_KEY": os.getenv("SUPABASE_KEY"),
-            "GOOGLE_CLIENT_ID": os.getenv("GOOGLE_CLIENT_ID")
+            "GOOGLE_CLIENT_ID": client_id
         }
     })
 
@@ -549,6 +565,49 @@ async def process_video(youtube_url: str = Form(...), num_screenshots: int = For
             'success': False,
             'error': str(e)
         })
+
+@app.get("/auth/callback")
+async def auth_callback(request: Request):
+    try:
+        # セッショントークンの取得
+        access_token = request.cookies.get("sb-access-token")
+        refresh_token = request.cookies.get("sb-refresh-token")
+        
+        if not access_token:
+            raise HTTPException(status_code=401, detail="No session token")
+            
+        return RedirectResponse(url="/")
+        
+    except Exception as e:
+        print(f"Auth callback error: {str(e)}")
+        raise HTTPException(status_code=400, detail=str(e))
+
+@app.get("/auth/debug")
+async def auth_debug():
+    try:
+        # Supabaseの設定を確認
+        return {
+            "supabase_url": supabase_url[:20] + "...",  # URLの一部のみ表示
+            "auth_config": {
+                "provider": "google",
+                "flow_type": "pkce",
+                "redirect_url": "/auth/callback"
+            },
+            "google_config": {
+                "client_id": os.getenv("GOOGLE_CLIENT_ID")[:20] + "..."  # IDの一部のみ表示
+            }
+        }
+    except Exception as e:
+        return {"error": str(e)}
+
+@app.get("/debug")
+async def debug_info(request: Request):
+    return {
+        "base_url": str(request.base_url),
+        "client_id": os.getenv("GOOGLE_CLIENT_ID"),
+        "env_vars": {k: v for k, v in os.environ.items() if 'GOOGLE' in k},
+        "headers": dict(request.headers)
+    }
 
 # アプリケーション起動時にディレクトリを作成
 os.makedirs(DOWNLOAD_DIR, exist_ok=True)

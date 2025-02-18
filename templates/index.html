@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>YouTube Transcriber</title>
     <script src="https://cdn.tailwindcss.com"></script>
-    <script src="https://accounts.google.com/gsi/client" async></script>
+    <script src="https://accounts.google.com/gsi/client" async defer></script>
     <script src="https://unpkg.com/@supabase/supabase-js@2"></script>
     <style>
         .loading {
@@ -58,21 +58,9 @@
         
         <!-- ログインコンテナ -->
         <div id="loginContainer" class="text-center mb-8">
-            <div id="g_id_onload"
-                 data-client_id="{{ config.GOOGLE_CLIENT_ID }}"
-                 data-context="signin"
-                 data-ux_mode="popup"
-                 data-callback="handleCredentialResponse"
-                 data-auto_prompt="false">
-            </div>
-            <div class="g_id_signin"
-                 data-type="standard"
-                 data-size="large"
-                 data-theme="outline"
-                 data-text="sign_in_with"
-                 data-shape="rectangular"
-                 data-logo_alignment="left">
-            </div>
+            <button onclick="handleGoogleSignIn()" class="bg-blue-500 text-white px-4 py-2 rounded">
+                Googleでログイン
+            </button>
         </div>
 
         <!-- 処理フォーム（初期状態は非表示） -->
@@ -143,26 +131,66 @@
     </div>
 
     <script>
-        // Supabaseクライアントの初期化
-        const supabase = supabase.createClient(
-            '{{ config.SUPABASE_URL }}',
-            '{{ config.SUPABASE_ANON_KEY }}'
-        );
+        let supabaseClient;  // グローバル変数として定義
 
-        // Googleログインハンドラーを修正
-        async function handleCredentialResponse(response) {
-            try {
-                const { data, error } = await supabase.auth.signInWithIdToken({
-                    provider: 'google',
-                    token: response.credential,
-                    nonce: 'NONCE' // 必要に応じて動的に生成
-                });
-                
-                if (error) throw error;
-                
-                updateUserProfile(data.user);
+        // 初期化関数を作成
+        async function initializeApp() {
+            // Supabaseクライアントの初期化
+            supabaseClient = supabase.createClient(
+                '{{ config.SUPABASE_URL }}',
+                '{{ config.SUPABASE_ANON_KEY }}'
+            );
+
+            // デバッグログ
+            console.log('Client ID:', '{{ config.GOOGLE_CLIENT_ID }}');
+            console.log('Base URL:', '{{ request.base_url }}');
+            
+            // Google Sign-In初期化
+            google.accounts.id.initialize({
+                client_id: '{{ config.GOOGLE_CLIENT_ID }}',
+                callback: handleCredentialResponse
+            });
+            
+            // ボタンの表示
+            google.accounts.id.renderButton(
+                document.querySelector('.g_id_signin'),
+                { theme: 'outline', size: 'large' }
+            );
+
+            // セッションチェック
+            const { data: { session }, error } = await supabaseClient.auth.getSession();
+            if (session) {
+                updateUserProfile(session.user);
                 document.getElementById('processForm').style.display = 'block';
                 document.getElementById('loginContainer').style.display = 'none';
+            }
+        }
+
+        // ページ読み込み時に初期化
+        window.onload = initializeApp;
+
+        // 以降のsupabaseの参照をsupabaseClientに変更
+        async function handleCredentialResponse(response) {
+            console.log("Google response:", response);
+            try {
+                const result = await fetch('/auth/google/callback', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        credential: response.credential
+                    })
+                });
+                
+                const data = await result.json();
+                console.log("Server response:", data);
+                
+                if (result.ok) {
+                    window.location.href = '/';
+                } else {
+                    throw new Error(data.detail || 'Authentication failed');
+                }
             } catch (error) {
                 console.error('Error:', error);
                 alert('ログインに失敗しました: ' + error.message);
@@ -179,23 +207,26 @@
                 userAvatar.src = user.user_metadata.avatar_url;
                 userName.textContent = user.user_metadata.full_name;
                 userProfile.classList.add('active');
+                document.getElementById('loginContainer').style.display = 'none';
+                document.getElementById('processForm').style.display = 'block';
             } else {
                 userProfile.classList.remove('active');
+                document.getElementById('loginContainer').style.display = 'block';
+                document.getElementById('processForm').style.display = 'none';
             }
         }
 
         // ログアウト処理
         async function handleSignOut() {
             try {
-                const { error } = await supabase.auth.signOut();
+                const { error } = await supabaseClient.auth.signOut();
                 if (error) throw error;
                 
-                document.getElementById('userProfile').classList.remove('active');
-                document.getElementById('processForm').style.display = 'none';
-                document.getElementById('loginContainer').style.display = 'block';
+                updateUserProfile(null);
                 location.reload();
             } catch (error) {
                 console.error('Error signing out:', error);
+                alert('ログアウトに失敗しました: ' + error.message);
             }
         }
 
@@ -203,16 +234,6 @@
         function toggleUserMenu() {
             const menu = document.getElementById('userMenu');
             menu.classList.toggle('active');
-        }
-
-        // ページ読み込み時の認証状態チェック
-        window.onload = async function() {
-            const { data: { session }, error } = await supabase.auth.getSession();
-            if (session) {
-                updateUserProfile(session.user);
-                document.getElementById('processForm').style.display = 'block';
-                document.getElementById('loginContainer').style.display = 'none';
-            }
         }
 
         document.getElementById('processForm').addEventListener('submit', async (e) => {
@@ -265,6 +286,21 @@
             const errorMessage = document.getElementById('errorMessage');
             errorDiv.classList.remove('hidden');
             errorMessage.textContent = message;
+        }
+
+        // Google認証ボタンのクリックハンドラ
+        async function handleGoogleSignIn() {
+            const { data, error } = await supabaseClient.auth.signInWithOAuth({
+                provider: 'google',
+                options: {
+                    redirectTo: window.location.origin
+                }
+            });
+
+            if (error) {
+                console.error('Error:', error.message);
+                alert('ログインに失敗しました: ' + error.message);
+            }
         }
     </script>
 </body>

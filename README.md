@@ -136,3 +136,72 @@ vercel deploy
 ## ライセンス
 
 MIT License
+
+## Google認証の実装方法
+
+1. **Supabaseでの設定**:
+   - Supabaseプロジェクトの認証設定でGoogleプロバイダーを有効化
+   - Google Cloud Consoleで認証情報を作成し、クライアントIDとシークレットを取得
+   - Supabaseの認証設定にGoogle認証情報を設定
+
+2. **環境変数の設定**:
+   ```bash
+   # .env.development
+   SUPABASE_URL=your_supabase_url
+   SUPABASE_KEY=your_supabase_anon_key
+   GOOGLE_CLIENT_ID=your_google_client_id
+   GOOGLE_CLIENT_SECRET=your_google_client_secret
+   ```
+
+3. **フロントエンド実装**:
+   ```html
+   <!-- Supabase JSクライアントの読み込み -->
+   <script src="https://unpkg.com/@supabase/supabase-js@2"></script>
+
+   <!-- ログインボタン -->
+   <button onclick="handleGoogleSignIn()" class="bg-blue-500 text-white px-4 py-2 rounded">
+       Googleでログイン
+   </button>
+
+   <script>
+   // Supabaseクライアントの初期化
+   const supabase = supabase.createClient(
+       '{{ config.SUPABASE_URL }}',
+       '{{ config.SUPABASE_ANON_KEY }}'
+   );
+
+   // Google認証ハンドラ
+   async function handleGoogleSignIn() {
+       const { data, error } = await supabase.auth.signInWithOAuth({
+           provider: 'google',
+           options: {
+               redirectTo: window.location.origin
+           }
+       });
+
+       if (error) {
+           console.error('Error:', error.message);
+           alert('ログインに失敗しました: ' + error.message);
+       }
+   }
+   </script>
+   ```
+
+4. **バックエンド実装**:
+   ```python
+   @app.get("/auth/callback")
+   async def auth_callback(request: Request):
+       try:
+           # セッショントークンの取得
+           access_token = request.cookies.get("sb-access-token")
+           refresh_token = request.cookies.get("sb-refresh-token")
+           
+           if not access_token:
+               raise HTTPException(status_code=401, detail="No session token")
+               
+           return RedirectResponse(url="/")
+           
+       except Exception as e:
+           print(f"Auth callback error: {str(e)}")
+           raise HTTPException(status_code=400, detail=str(e))
+   ```
