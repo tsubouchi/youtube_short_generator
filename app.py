@@ -626,10 +626,9 @@ async def get_current_user(token: str = Depends(oauth2_scheme)):
 
 if __name__ == "__main__":
     import uvicorn
-    # ポート8000で起動するように変更
     uvicorn.run(
         app,
         host="0.0.0.0",
-        port=8000,
-        reload=True  # 開発時の自動リロードを有効化
+        port=3000,
+        reload=True
     )
