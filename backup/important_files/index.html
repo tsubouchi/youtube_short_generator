@@ -1,0 +1,281 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>YouTube Transcriber</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://accounts.google.com/gsi/client" async defer></script>
+    <script src="https://unpkg.com/@supabase/supabase-js@2"></script>
+    <style>
+        .loading {
+            display: none;
+        }
+        .loading.active {
+            display: block;
+        }
+        .user-profile {
+            position: fixed;
+            top: 1rem;
+            right: 1rem;
+            display: none;
+        }
+        .user-profile.active {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+        .user-menu {
+            position: absolute;
+            top: 100%;
+            right: 0;
+            background: #1f2937;
+            border-radius: 0.5rem;
+            padding: 0.5rem;
+            display: none;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        .user-menu.active { display: block; }
+    </style>
+</head>
+<body class="bg-black text-white min-h-screen">
+    <!-- ユーザープロフィール -->
+    <div id="userProfile" class="user-profile">
+        <div onclick="toggleUserMenu()" class="cursor-pointer flex items-center gap-2">
+            <img id="userAvatar" class="w-10 h-10 rounded-full" src="" alt="User avatar">
+            <span id="userName" class="text-sm"></span>
+        </div>
+        <div id="userMenu" class="user-menu">
+            <button onclick="handleSignOut()" 
+                    class="w-full text-left px-4 py-2 hover:bg-gray-700 rounded text-sm">
+                ログアウト
+            </button>
+        </div>
+    </div>
+
+    <div class="container mx-auto px-4 py-8">
+        <h1 class="text-4xl font-bold mb-8 text-center">YouTube Transcriber</h1>
+        
+        <!-- ログインコンテナ -->
+        <div id="loginContainer" class="text-center mb-8">
+            <button onclick="handleGoogleSignIn()" class="bg-blue-500 text-white px-4 py-2 rounded">
+                Googleでログイン
+            </button>
+        </div>
+
+        <!-- 処理フォーム（初期状態は非表示） -->
+        <div id="processContainer" style="display: none;">
+            <!-- 入力フォーム -->
+            <div class="max-w-2xl mx-auto mb-8">
+                <form id="processForm" class="space-y-4" onsubmit="handleSubmit(event)">
+                    <div>
+                        <input type="text" 
+                               id="youtube_url" 
+                               name="youtube_url" 
+                               placeholder="YouTube URLを入力してください" 
+                               class="w-full p-3 rounded bg-gray-800 text-white border border-gray-700 focus:border-blue-500 focus:outline-none">
+                    </div>
+                    <div class="flex justify-between items-center">
+                        <div>
+                            <label class="block text-sm mb-2">スクリーンショット数:</label>
+                            <input type="number" 
+                                   id="num_screenshots" 
+                                   name="num_screenshots" 
+                                   value="3" 
+                                   min="1" 
+                                   max="10" 
+                                   class="w-24 p-2 rounded bg-gray-800 text-white border border-gray-700">
+                        </div>
+                        <button type="submit" 
+                                class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-8 rounded transition duration-200">
+                            処理開始
+                        </button>
+                    </div>
+                </form>
+            </div>
+
+            <!-- 結果表示エリア -->
+            <div id="result" class="hidden max-w-2xl mx-auto mt-8 space-y-6">
+                <!-- 動画情報 -->
+                <div class="bg-gray-800 p-4 rounded-lg">
+                    <h3 class="text-xl font-bold mb-4">処理結果</h3>
+                    <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                        <!-- スクリーンショット -->
+                        <div id="screenshots" class="space-y-2">
+                            <!-- スクリーンショットがここに動的に追加される -->
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 文字起こし結果 -->
+                <div class="bg-gray-800 p-4 rounded-lg">
+                    <h3 class="text-lg font-bold mb-2">文字起こし</h3>
+                    <p id="transcriptionText" class="text-gray-300 whitespace-pre-wrap"></p>
+                </div>
+
+                <!-- 翻訳結果 -->
+                <div class="bg-gray-800 p-4 rounded-lg">
+                    <h3 class="text-lg font-bold mb-2">英訳</h3>
+                    <p id="translationText" class="text-gray-300 whitespace-pre-wrap"></p>
+                </div>
+            </div>
+
+            <!-- ローディング表示 -->
+            <div id="loading" class="loading max-w-2xl mx-auto mt-8 text-center">
+                <div class="animate-spin rounded-full h-12 w-12 border-b-2 border-white mx-auto"></div>
+                <p class="mt-4">処理中です...</p>
+            </div>
+
+            <!-- エラー表示 -->
+            <div id="error" class="hidden max-w-2xl mx-auto mt-8">
+                <div class="bg-red-900 text-white p-4 rounded-lg">
+                    <p id="errorMessage"></p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const SITE_URL = '{{ config.SITE_URL }}'.trim();
+        
+        // Supabaseクライアントの初期化
+        const supabaseClient = supabase.createClient(
+            '{{ config.SUPABASE_URL }}',
+            '{{ config.SUPABASE_ANON_KEY }}'
+        );
+
+        // Google認証ハンドラ
+        async function handleGoogleSignIn() {
+            try {
+                // 現在のURLがlocalhostかどうかを確認
+                const isLocalhost = window.location.hostname === 'localhost';
+                const redirectUrl = isLocalhost ? 'http://localhost:3000' : 'https://youtube-downloader-rnw5guisn-bonginkan-projects.vercel.app';
+
+                const { data, error } = await supabaseClient.auth.signInWithOAuth({
+                    provider: 'google',
+                    options: {
+                        redirectTo: redirectUrl,
+                        queryParams: {
+                            access_type: 'offline',
+                            prompt: 'consent'
+                        }
+                    }
+                });
+
+                if (error) throw error;
+            } catch (error) {
+                console.error('Error:', error);
+                alert('ログインに失敗しました');
+            }
+        }
+
+        // セッション監視
+        supabaseClient.auth.onAuthStateChange((event, session) => {
+            if (event === 'SIGNED_IN' && session) {
+                updateUserProfile(session.user);
+                
+                // URLクリーンアップ
+                if (window.location.hash || window.location.search) {
+                    window.history.replaceState({}, document.title, SITE_URL);
+                }
+            } else if (event === 'SIGNED_OUT') {
+                updateUserProfile(null);
+            }
+        });
+
+        // ユーザープロフィールの更新
+        function updateUserProfile(user) {
+            const userProfile = document.getElementById('userProfile');
+            const userAvatar = document.getElementById('userAvatar');
+            const userName = document.getElementById('userName');
+            
+            if (user) {
+                userAvatar.src = user.user_metadata.avatar_url;
+                userName.textContent = user.user_metadata.full_name;
+                userProfile.classList.add('active');
+                document.getElementById('loginContainer').style.display = 'none';
+                document.getElementById('processContainer').style.display = 'block';
+            } else {
+                userProfile.classList.remove('active');
+                document.getElementById('loginContainer').style.display = 'block';
+                document.getElementById('processContainer').style.display = 'none';
+            }
+        }
+
+        // ログアウト処理
+        async function handleSignOut() {
+            try {
+                const { error } = await supabaseClient.auth.signOut();
+                if (error) throw error;
+                
+                updateUserProfile(null);
+                location.reload();
+            } catch (error) {
+                console.error('Error signing out:', error);
+                alert('ログアウトに失敗しました: ' + error.message);
+            }
+        }
+
+        // ユーザーメニューの表示/非表示
+        function toggleUserMenu() {
+            const menu = document.getElementById('userMenu');
+            menu.classList.toggle('active');
+        }
+
+        // フォームの送信処理
+        document.getElementById('processForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            
+            // UI初期化
+            document.getElementById('loading').classList.add('active');
+            document.getElementById('result').classList.add('hidden');
+            document.getElementById('error').classList.add('hidden');
+            
+            const formData = new FormData();
+            formData.append('youtube_url', document.getElementById('youtube_url').value);
+            formData.append('num_screenshots', document.getElementById('num_screenshots').value);
+            
+            try {
+                const response = await fetch('/process', {
+                    method: 'POST',
+                    body: formData
+                });
+                
+                const data = await response.json();
+                
+                if (data.success) {
+                    displayResults(data);
+                } else {
+                    showError(data.error);
+                }
+            } catch (error) {
+                showError('処理中にエラーが発生しました: ' + error.message);
+            } finally {
+                document.getElementById('loading').classList.remove('active');
+            }
+        });
+
+        function displayResults(data) {
+            const resultDiv = document.getElementById('result');
+            resultDiv.classList.remove('hidden');
+            
+            // スクリーンショットの表示
+            const screenshotsDiv = document.getElementById('screenshots');
+            screenshotsDiv.innerHTML = data.screenshots.map(url => `
+                <img src="${url}" alt="Screenshot" class="w-full rounded-lg">
+            `).join('');
+            
+            // 文字起こしと翻訳の表示
+            document.getElementById('transcriptionText').textContent = data.transcription;
+            document.getElementById('translationText').textContent = data.translation;
+        }
+
+        function showError(message) {
+            const errorDiv = document.getElementById('error');
+            const errorMessage = document.getElementById('errorMessage');
+            errorDiv.classList.remove('hidden');
+            errorMessage.textContent = message;
+        }
+    </script>
+</body>
+</html> 

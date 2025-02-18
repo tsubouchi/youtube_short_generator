@@ -1,0 +1,3 @@
+-- RLS Policies
+ALTER TABLE videos ENABLE ROW LEVEL SECURITY;
+...

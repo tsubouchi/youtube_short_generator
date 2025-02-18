@@ -1,0 +1,15 @@
+# 不要なライブラリの削除と最小限の依存関係に
+fastapi==0.109.2
+python-multipart==0.0.9
+jinja2==3.1.3
+python-dotenv==1.0.1
+yt-dlp>=2023.11.16
+openai==01.63.02
+uvicorn==0.27.1
+supabase>=2.3.1
+httpx>=0.23.0
+aiohttp==3.9.1
+certifi==2024.2.2
+urllib3==2.2.0
+ffmpeg-python==0.2.0
+browser-cookie3==0.19.1
