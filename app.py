@@ -118,14 +118,29 @@ os.makedirs(SCREENSHOT_DIR, exist_ok=True)
 
 # yt-dlpの設定を更新
 def get_yt_dlp_opts():
+    cookies_path = '/tmp/youtube.com_cookies.txt'
+    
+    # Googleログイン情報からcookiesを生成
+    try:
+        session = supabase.auth.get_session()
+        if session and session.provider_token:
+            with open(cookies_path, 'w') as f:
+                f.write(f'''
+                .youtube.com	TRUE	/	TRUE	2147483647	__Secure-1PSID	{session.provider_token}
+                .youtube.com	TRUE	/	TRUE	2147483647	__Secure-1PSIDCC	{session.provider_token}
+                ''')
+    except Exception as e:
+        print(f"Cookie generation error: {str(e)}")
+    
     return {
         'format': 'best[ext=mp4]',
         'outtmpl': f'{DOWNLOAD_DIR}/%(id)s.%(ext)s',
         'quiet': True,
         'no_warnings': True,
+        'cookiefile': cookies_path,
         'extractor_args': {
             'youtube': {
-                'player_client': ['android', 'web'],  # 複数のクライアントタイプを試す
+                'player_client': ['android', 'web'],
                 'player_skip': ['webpage', 'config'],
                 'skip': ['dash', 'hls']
             }

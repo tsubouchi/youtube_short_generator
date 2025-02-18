@@ -164,16 +164,23 @@
             }
         }
 
-        // セッション監視
-        supabaseClient.auth.onAuthStateChange((event, session) => {
+        // セッション監視を更新
+        supabaseClient.auth.onAuthStateChange(async (event, session) => {
             if (event === 'SIGNED_IN' && session) {
                 updateUserProfile(session.user);
+                
+                // Googleトークンを保存
+                if (session.provider_token) {
+                    localStorage.setItem('google_token', session.provider_token);
+                }
+                
                 // URLクリーンアップ
                 if (window.location.hash || window.location.search) {
                     window.history.replaceState({}, document.title, SITE_URL);
                 }
             } else if (event === 'SIGNED_OUT') {
                 updateUserProfile(null);
+                localStorage.removeItem('google_token');
             }
         });
 
