@@ -131,71 +131,49 @@
     </div>
 
     <script>
-        let supabaseClient;  // グローバル変数として定義
+        const SITE_URL = '{{ config.SITE_URL }}';
+        
+        // Supabaseクライアントの初期化
+        const supabaseClient = supabase.createClient(
+            '{{ config.SUPABASE_URL }}',
+            '{{ config.SUPABASE_ANON_KEY }}'
+        );
 
-        // 初期化関数を作成
-        async function initializeApp() {
-            // Supabaseクライアントの初期化
-            supabaseClient = supabase.createClient(
-                '{{ config.SUPABASE_URL }}',
-                '{{ config.SUPABASE_ANON_KEY }}'
-            );
-
-            // デバッグログ
-            console.log('Client ID:', '{{ config.GOOGLE_CLIENT_ID }}');
-            console.log('Base URL:', '{{ request.base_url }}');
-            
-            // Google Sign-In初期化
-            google.accounts.id.initialize({
-                client_id: '{{ config.GOOGLE_CLIENT_ID }}',
-                callback: handleCredentialResponse
-            });
-            
-            // ボタンの表示
-            google.accounts.id.renderButton(
-                document.querySelector('.g_id_signin'),
-                { theme: 'outline', size: 'large' }
-            );
-
-            // セッションチェック
-            const { data: { session }, error } = await supabaseClient.auth.getSession();
-            if (session) {
-                updateUserProfile(session.user);
-                document.getElementById('processForm').style.display = 'block';
-                document.getElementById('loginContainer').style.display = 'none';
-            }
-        }
-
-        // ページ読み込み時に初期化
-        window.onload = initializeApp;
-
-        // 以降のsupabaseの参照をsupabaseClientに変更
-        async function handleCredentialResponse(response) {
-            console.log("Google response:", response);
+        // Google認証ハンドラ
+        async function handleGoogleSignIn() {
             try {
-                const result = await fetch('/auth/google/callback', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                    },
-                    body: JSON.stringify({
-                        credential: response.credential
-                    })
+                const { data, error } = await supabaseClient.auth.signInWithOAuth({
+                    provider: 'google',
+                    options: {
+                        redirectTo: `${SITE_URL}/auth/callback`,
+                        queryParams: {
+                            access_type: 'offline',
+                            prompt: 'consent'
+                        }
+                    }
                 });
-                
-                const data = await result.json();
-                console.log("Server response:", data);
-                
-                if (result.ok) {
-                    window.location.href = '/';
-                } else {
-                    throw new Error(data.detail || 'Authentication failed');
+
+                if (error) {
+                    console.error('Error:', error.message);
+                    alert('ログインに失敗しました: ' + error.message);
                 }
             } catch (error) {
                 console.error('Error:', error);
-                alert('ログインに失敗しました: ' + error.message);
+                alert('ログインに失敗しました');
             }
         }
+
+        // セッション監視
+        supabaseClient.auth.onAuthStateChange((event, session) => {
+            if (event === 'SIGNED_IN' && session) {
+                updateUserProfile(session.user);
+                if (window.location.hash) {
+                    window.location.href = SITE_URL;
+                }
+            } else if (event === 'SIGNED_OUT') {
+                updateUserProfile(null);
+            }
+        });
 
         // ユーザープロフィールの更新
         function updateUserProfile(user) {
@@ -287,39 +265,6 @@
             errorDiv.classList.remove('hidden');
             errorMessage.textContent = message;
         }
-
-        // Google認証ボタンのクリックハンドラ
-        async function handleGoogleSignIn() {
-            const { data, error } = await supabaseClient.auth.signInWithOAuth({
-                provider: 'google',
-                options: {
-                    redirectTo: window.location.origin + '/auth/callback',
-                    queryParams: {
-                        access_type: 'offline',
-                        prompt: 'consent'
-                    },
-                    skipBrowserRedirect: true  // ブラウザリダイレクトをスキップ
-                }
-            });
-
-            if (error) {
-                console.error('Error:', error.message);
-                alert('ログインに失敗しました: ' + error.message);
-            } else if (data?.url) {
-                window.location.href = data.url;  // 認証URLに直接リダイレクト
-            }
-        }
-
-        // ハッシュパラメータをチェック
-        window.addEventListener('load', async () => {
-            if (window.location.hash) {
-                const { data: { session }, error } = await supabaseClient.auth.getSession();
-                if (session) {
-                    // セッションが存在する場合、ハッシュを削除してリダイレクト
-                    window.location.href = window.location.origin + window.location.pathname;
-                }
-            }
-        });
     </script>
 </body>
 </html> 

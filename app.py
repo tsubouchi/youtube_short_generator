@@ -441,19 +441,14 @@ async def log_processing_status(video_id: str, status: str, message: Optional[st
 
 @app.get("/")
 async def index(request: Request):
-    client_id = os.getenv("GOOGLE_CLIENT_ID")
-    print(f"Base URL: {request.base_url}")
-    print(f"Google Client ID: {client_id}")
-    
-    if not client_id:
-        raise HTTPException(status_code=500, detail="Google Client ID is not set")
-        
+    site_url = os.getenv("NEXT_PUBLIC_SITE_URL", str(request.base_url).rstrip('/'))
     return templates.TemplateResponse("index.html", {
         "request": request,
         "config": {
             "SUPABASE_URL": os.getenv("SUPABASE_URL"),
             "SUPABASE_ANON_KEY": os.getenv("SUPABASE_KEY"),
-            "GOOGLE_CLIENT_ID": client_id
+            "GOOGLE_CLIENT_ID": os.getenv("GOOGLE_CLIENT_ID"),
+            "SITE_URL": site_url
         }
     })
 
