@@ -12,7 +12,7 @@ aiohttp==3.9.1
 certifi==2024.2.2
 urllib3==2.2.0
 ffmpeg-python==0.2.0
-browser-cookie3==0.20.1
+browser-cookie3==0.19.1
 lz4==4.4.3
 google-api-python-client==2.108.0
 google-auth-httplib2==0.1.1

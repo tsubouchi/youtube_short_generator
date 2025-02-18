@@ -16,6 +16,8 @@ from dotenv import load_dotenv
 from googleapiclient.discovery import build
 from google.oauth2.credentials import Credentials
 from googleapiclient.errors import HttpError
+from yt_dlp.utils import std_headers
+import browser_cookie3
 
 # Python標準ライブラリ
 import os
@@ -128,30 +130,18 @@ os.makedirs(DOWNLOAD_DIR, exist_ok=True)
 os.makedirs(SCREENSHOT_DIR, exist_ok=True)
 
 # YouTube cookiesの設定を改善
-async def get_youtube_cookies():
+def get_youtube_cookies():
     try:
-        cookies_str = os.getenv('YOUTUBE_COOKIES', '')
-        if cookies_str:
-            cookies_path = '/tmp/youtube.com_cookies.txt'
-            # Netscape形式でCookieファイルを作成
-            with open(cookies_path, 'w') as f:
-                f.write("# Netscape HTTP Cookie File\n")
-                f.write("# https://curl.haxx.se/rfc/cookie_spec.html\n")
-                f.write("# This is a generated file!  Do not edit.\n\n")
-                
-                # 各Cookieを正しい形式で書き込み
-                cookies = cookies_str.split(';')
-                for cookie in cookies:
-                    if '=' in cookie:
-                        name, value = cookie.strip().split('=', 1)
-                        f.write(f".youtube.com\tTRUE\t/\tTRUE\t2147483647\t{name}\t{value}\n")
-            
-            print(f"Cookie file created at: {cookies_path}")
-            return cookies_path
-        return None
-    except Exception as e:
-        print(f"Cookie設定エラー: {str(e)}")
-        return None
+        # Chrome/Chromiumのクッキーを取得
+        cookies = browser_cookie3.chrome(domain_name='.youtube.com')
+        return cookies
+    except:
+        try:
+            # Firefoxのクッキーを取得
+            cookies = browser_cookie3.firefox(domain_name='.youtube.com')
+            return cookies
+        except:
+            return None
 
 # yt-dlpの設定を更新
 async def get_yt_dlp_opts():
