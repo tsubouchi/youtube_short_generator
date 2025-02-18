@@ -114,10 +114,9 @@ def get_yt_dlp_opts():
         'outtmpl': f'{DOWNLOAD_DIR}/%(id)s.%(ext)s',
         'quiet': True,
         'no_warnings': True,
-        # Bot対策の回避オプションを追加
         'extractor_args': {
             'youtube': {
-                'player_client': ['android'],
+                'player_client': ['android', 'web'],  # 複数のクライアントタイプを試す
                 'player_skip': ['webpage', 'config'],
                 'skip': ['dash', 'hls']
             }
@@ -202,14 +201,14 @@ async def check_video_duration(url: str) -> dict:
             'quiet': True,
             'no_warnings': True,
             'extract_flat': True,
-            # Bot対策の回避オプションを追加
             'extractor_args': {
                 'youtube': {
-                    'player_client': ['android'],
+                    'player_client': ['android', 'web'],  # 複数のクライアントタイプを試す
                     'player_skip': ['webpage', 'config'],
                     'skip': ['dash', 'hls']
                 }
-            }
+            },
+            'format': 'best[ext=mp4]'  # 形式を指定
         }
         
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
@@ -237,11 +236,12 @@ async def check_video_duration(url: str) -> dict:
                     raise Exception("この動画は非公開です")
                 elif "Video unavailable" in str(e):
                     raise Exception("この動画は利用できません")
-                elif "Sign in to confirm" in str(e):
-                    # Bot対策エラーの場合の特別な処理
+                elif "Please sign in" in str(e) or "Sign in to confirm" in str(e):
+                    # ログインが必要な場合、別の方法を試す
                     print("Attempting alternative download method...")
-                    ydl_opts['extractor_args']['youtube']['player_client'] = ['tv_embedded']
-                    with yt_dlp.YoutubeDL(ydl_opts) as alt_ydl:
+                    alt_opts = ydl_opts.copy()
+                    alt_opts['extractor_args']['youtube']['player_client'] = ['tv_embedded', 'web_embedded']
+                    with yt_dlp.YoutubeDL(alt_opts) as alt_ydl:
                         info = alt_ydl.extract_info(url, download=False)
                         duration = info.get('duration', 0)
                         return {
