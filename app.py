@@ -1,8 +1,9 @@
 # FastAPI関連
-from fastapi import FastAPI, Request, Form
+from fastapi import FastAPI, Request, Form, Depends, HTTPException, status
 from fastapi.templating import Jinja2Templates
 from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
+from fastapi.security import OAuth2PasswordBearer
 
 # 外部ライブラリ
 import yt_dlp
@@ -442,10 +443,38 @@ async def log_processing_status(video_id: str, status: str, message: Optional[st
 
 @app.get("/")
 async def index(request: Request):
-    return templates.TemplateResponse("index.html", {"request": request})
+    return templates.TemplateResponse("index.html", {
+        "request": request,
+        "config": {
+            "SUPABASE_URL": os.getenv("NEXT_PUBLIC_SUPABASE_URL"),
+            "SUPABASE_ANON_KEY": os.getenv("NEXT_PUBLIC_SUPABASE_ANON_KEY"),
+            "GOOGLE_CLIENT_ID": os.getenv("GOOGLE_CLIENT_ID")
+        }
+    })
 
+# セッション検証ミドルウェアを追加
+async def verify_session(request: Request):
+    try:
+        auth_header = request.headers.get('Authorization')
+        if not auth_header:
+            raise HTTPException(status_code=401, detail="認証が必要です")
+            
+        token = auth_header.split(' ')[1]
+        user = supabase.auth.get_user(token)
+        return user
+    except Exception as e:
+        raise HTTPException(status_code=401, detail="無効なセッションです")
+
+# 処理エンドポイントを保護
 @app.post("/process")
-async def process_video(youtube_url: str = Form(...), num_screenshots: int = Form(3)):
+async def process_video(
+    request: Request,
+    youtube_url: str = Form(...),
+    num_screenshots: int = Form(3)
+):
+    # セッションを検証
+    user = await verify_session(request)
+    
     try:
         # 動画の長さをチェック
         video_info = await check_video_duration(youtube_url)
@@ -565,6 +594,35 @@ COOKIES_PATH = '/tmp/youtube.com_cookies.txt'
 if os.getenv('YOUTUBE_COOKIES'):
     with open(COOKIES_PATH, 'w') as f:
         f.write(os.getenv('YOUTUBE_COOKIES'))
+
+# 認証関連のエンドポイント
+@app.post("/auth/google/callback")
+async def google_auth_callback(code: str):
+    try:
+        # Supabaseのauth.signInWithIdTokenを使用
+        response = supabase.auth.sign_in_with_id_token({
+            "provider": "google",
+            "token": code,
+        })
+        return response
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail=str(e)
+        )
+
+# 認証が必要なエンドポイントの保護
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token")
+
+async def get_current_user(token: str = Depends(oauth2_scheme)):
+    try:
+        user = supabase.auth.get_user(token)
+        return user
+    except Exception:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid authentication credentials"
+        )
 
 if __name__ == "__main__":
     import uvicorn

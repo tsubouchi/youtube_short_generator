@@ -5,6 +5,8 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>YouTube Transcriber</title>
     <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://accounts.google.com/gsi/client" async></script>
+    <script src="https://unpkg.com/@supabase/supabase-js@2"></script>
     <style>
         .loading {
             display: none;
@@ -13,13 +15,66 @@
             display: block;
         }
     </style>
+    <script>
+        // Supabaseクライアントの初期化
+        const supabase = supabase.createClient(
+            '{{ config.SUPABASE_URL }}',
+            '{{ config.SUPABASE_ANON_KEY }}'
+        )
+
+        // Googleログインハンドラー
+        async function handleSignInWithGoogle(response) {
+            try {
+                const { data, error } = await supabase.auth.signInWithIdToken({
+                    provider: 'google',
+                    token: response.credential,
+                })
+                
+                if (error) throw error
+                
+                // ログイン成功時の処理
+                console.log('Logged in:', data)
+                document.getElementById('loginStatus').textContent = 'ログイン済み'
+                document.getElementById('processForm').style.display = 'block'
+            } catch (error) {
+                console.error('Error:', error)
+                alert('ログインに失敗しました')
+            }
+        }
+
+        // ページ読み込み時の認証状態チェック
+        window.onload = async function() {
+            const { data: { session }, error } = await supabase.auth.getSession()
+            if (session) {
+                document.getElementById('loginStatus').textContent = 'ログイン済み'
+                document.getElementById('processForm').style.display = 'block'
+            }
+        }
+    </script>
 </head>
 <body class="bg-black text-white min-h-screen">
     <div class="container mx-auto px-4 py-8">
         <h1 class="text-4xl font-bold mb-8 text-center">YouTube Transcriber</h1>
         
-        <!-- 入力フォーム -->
-        <div class="max-w-2xl mx-auto mb-8">
+        <div id="loginStatus">未ログイン</div>
+        
+        <!-- Googleログインボタン -->
+        <div id="g_id_onload"
+             data-client_id="{{ config.GOOGLE_CLIENT_ID }}"
+             data-callback="handleSignInWithGoogle"
+             data-auto_prompt="false">
+        </div>
+        <div class="g_id_signin"
+             data-type="standard"
+             data-size="large"
+             data-theme="outline"
+             data-text="sign_in_with"
+             data-shape="rectangular"
+             data-logo_alignment="left">
+        </div>
+
+        <!-- 処理フォーム（初期状態は非表示） -->
+        <div id="processForm" style="display: none;">
             <form id="processForm" class="space-y-4">
                 <div>
                     <input type="text" 
