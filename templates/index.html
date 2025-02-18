@@ -14,6 +14,36 @@
         .loading.active {
             display: block;
         }
+        .user-profile {
+            position: fixed;
+            top: 1rem;
+            right: 1rem;
+            display: none;
+        }
+        .user-profile.active {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+        .user-avatar {
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            object-fit: cover;
+        }
+        .user-menu {
+            position: absolute;
+            top: 100%;
+            right: 0;
+            background: #1f2937;
+            border-radius: 0.5rem;
+            padding: 0.5rem;
+            display: none;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        .user-menu.active {
+            display: block;
+        }
     </style>
     <script>
         // Supabaseクライアントの初期化
@@ -34,11 +64,42 @@
                 
                 // ログイン成功時の処理
                 console.log('Logged in:', data)
-                document.getElementById('loginStatus').textContent = 'ログイン済み'
+                updateUserProfile(data.user)
                 document.getElementById('processForm').style.display = 'block'
+                document.getElementById('loginContainer').style.display = 'none'
             } catch (error) {
                 console.error('Error:', error)
                 alert('ログインに失敗しました')
+            }
+        }
+
+        // ユーザープロフィールの更新
+        function updateUserProfile(user) {
+            const userProfile = document.getElementById('userProfile')
+            const userAvatar = document.getElementById('userAvatar')
+            const userName = document.getElementById('userName')
+            
+            if (user) {
+                userAvatar.src = user.user_metadata.avatar_url
+                userName.textContent = user.user_metadata.full_name
+                userProfile.classList.add('active')
+            } else {
+                userProfile.classList.remove('active')
+            }
+        }
+
+        // ログアウト処理
+        async function handleSignOut() {
+            try {
+                const { error } = await supabase.auth.signOut()
+                if (error) throw error
+                
+                document.getElementById('userProfile').classList.remove('active')
+                document.getElementById('processForm').style.display = 'none'
+                document.getElementById('loginContainer').style.display = 'block'
+                location.reload()
+            } catch (error) {
+                console.error('Error signing out:', error)
             }
         }
 
@@ -46,31 +107,52 @@
         window.onload = async function() {
             const { data: { session }, error } = await supabase.auth.getSession()
             if (session) {
-                document.getElementById('loginStatus').textContent = 'ログイン済み'
+                updateUserProfile(session.user)
                 document.getElementById('processForm').style.display = 'block'
+                document.getElementById('loginContainer').style.display = 'none'
             }
+        }
+
+        // ユーザーメニューの表示/非表示
+        function toggleUserMenu() {
+            const menu = document.getElementById('userMenu')
+            menu.classList.toggle('active')
         }
     </script>
 </head>
 <body class="bg-black text-white min-h-screen">
+    <!-- ユーザープロフィール -->
+    <div id="userProfile" class="user-profile">
+        <div onclick="toggleUserMenu()" class="cursor-pointer flex items-center gap-2">
+            <img id="userAvatar" class="user-avatar" src="" alt="User avatar">
+            <span id="userName" class="text-sm"></span>
+        </div>
+        <div id="userMenu" class="user-menu">
+            <button onclick="handleSignOut()" 
+                    class="w-full text-left px-4 py-2 hover:bg-gray-700 rounded text-sm">
+                ログアウト
+            </button>
+        </div>
+    </div>
+
     <div class="container mx-auto px-4 py-8">
         <h1 class="text-4xl font-bold mb-8 text-center">YouTube Transcriber</h1>
         
-        <div id="loginStatus">未ログイン</div>
-        
-        <!-- Googleログインボタン -->
-        <div id="g_id_onload"
-             data-client_id="{{ config.GOOGLE_CLIENT_ID }}"
-             data-callback="handleSignInWithGoogle"
-             data-auto_prompt="false">
-        </div>
-        <div class="g_id_signin"
-             data-type="standard"
-             data-size="large"
-             data-theme="outline"
-             data-text="sign_in_with"
-             data-shape="rectangular"
-             data-logo_alignment="left">
+        <!-- ログインコンテナ -->
+        <div id="loginContainer" class="text-center mb-8">
+            <div id="g_id_onload"
+                 data-client_id="{{ config.GOOGLE_CLIENT_ID }}"
+                 data-callback="handleSignInWithGoogle"
+                 data-auto_prompt="false">
+            </div>
+            <div class="g_id_signin"
+                 data-type="standard"
+                 data-size="large"
+                 data-theme="outline"
+                 data-text="sign_in_with"
+                 data-shape="rectangular"
+                 data-logo_alignment="left">
+            </div>
         </div>
 
         <!-- 処理フォーム（初期状態は非表示） -->
