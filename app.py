@@ -107,11 +107,22 @@ SCREENSHOT_DIR = f"{TEMP_DIR}/screenshots"
 os.makedirs(DOWNLOAD_DIR, exist_ok=True)
 os.makedirs(SCREENSHOT_DIR, exist_ok=True)
 
-# yt-dlpの設定
-ydl_opts = {
-    'format': 'best[ext=mp4]',
-    'outtmpl': f'{DOWNLOAD_DIR}/%(id)s.%(ext)s'
-}
+# yt-dlpの設定を更新
+def get_yt_dlp_opts():
+    return {
+        'format': 'best[ext=mp4]',
+        'outtmpl': f'{DOWNLOAD_DIR}/%(id)s.%(ext)s',
+        'quiet': True,
+        'no_warnings': True,
+        # Bot対策の回避オプションを追加
+        'extractor_args': {
+            'youtube': {
+                'player_client': ['android'],
+                'player_skip': ['webpage', 'config'],
+                'skip': ['dash', 'hls']
+            }
+        }
+    }
 
 def save_to_markdown(video_id: str, url: str, transcription: str, translation: str):
     """結果をMarkdownファイルとして保存する"""
@@ -184,26 +195,66 @@ async def upload_to_supabase(file_path: str, content_type: str, bucket: str = 'v
         print(f"Bucket: {bucket}")
         raise Exception(f"Supabaseへのアップロードに失敗しました: {str(e)}")
 
-# 動画の長さをチェックする関数を追加
+# check_video_duration関数を修正
 async def check_video_duration(url: str) -> dict:
     try:
-        # キャッシュを使用して重複ダウンロードを防ぐ
         ydl_opts = {
             'quiet': True,
             'no_warnings': True,
-            'extract_flat': True
+            'extract_flat': True,
+            # Bot対策の回避オプションを追加
+            'extractor_args': {
+                'youtube': {
+                    'player_client': ['android'],
+                    'player_skip': ['webpage', 'config'],
+                    'skip': ['dash', 'hls']
+                }
+            }
         }
         
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-            info = ydl.extract_info(url, download=False)
-            duration = info.get('duration', 0)
-            return {
-                'is_valid': duration <= 180,
-                'id': info['id'],
-                'duration': duration,
-                'thumbnail': info.get('thumbnail')
-            }
+            try:
+                info = ydl.extract_info(url, download=False)
+                if not info:
+                    raise Exception("動画情報を取得できません")
+                
+                duration = info.get('duration', 0)
+                
+                # 動画が削除されているかチェック
+                if info.get('unavailable'):
+                    raise Exception("この動画は削除されているか、アクセスできません")
+                
+                return {
+                    'is_valid': duration <= 180,
+                    'id': info['id'],
+                    'duration': duration,
+                    'thumbnail': info.get('thumbnail')
+                }
+            except yt_dlp.utils.DownloadError as e:
+                if "Terms of Service" in str(e):
+                    raise Exception("この動画はYouTubeの利用規約違反により削除されています")
+                elif "Private video" in str(e):
+                    raise Exception("この動画は非公開です")
+                elif "Video unavailable" in str(e):
+                    raise Exception("この動画は利用できません")
+                elif "Sign in to confirm" in str(e):
+                    # Bot対策エラーの場合の特別な処理
+                    print("Attempting alternative download method...")
+                    ydl_opts['extractor_args']['youtube']['player_client'] = ['tv_embedded']
+                    with yt_dlp.YoutubeDL(ydl_opts) as alt_ydl:
+                        info = alt_ydl.extract_info(url, download=False)
+                        duration = info.get('duration', 0)
+                        return {
+                            'is_valid': duration <= 180,
+                            'id': info['id'],
+                            'duration': duration,
+                            'thumbnail': info.get('thumbnail')
+                        }
+                else:
+                    raise Exception(f"動画の取得に失敗しました: {str(e)}")
+                    
     except Exception as e:
+        print(f"Video check error: {str(e)}")
         raise Exception(f"動画情報の取得に失敗しました: {str(e)}")
 
 # プロジェクト保存関数の修正
@@ -417,7 +468,7 @@ async def process_video(youtube_url: str = Form(...), num_screenshots: int = For
             temp_video_file = f"{DOWNLOAD_DIR}/{video_info['id']}.mp4"
             os.makedirs(DOWNLOAD_DIR, exist_ok=True)
 
-            with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+            with yt_dlp.YoutubeDL(get_yt_dlp_opts()) as ydl:
                 info = ydl.extract_info(youtube_url, download=True)
                 if not info:
                     raise Exception("動画のダウンロードに失敗しました")
@@ -495,6 +546,15 @@ async def process_video(youtube_url: str = Form(...), num_screenshots: int = For
 # アプリケーション起動時にディレクトリを作成
 os.makedirs(DOWNLOAD_DIR, exist_ok=True)
 os.makedirs('/tmp/outputs', exist_ok=True)
+
+# アプリケーション起動時にcookiesを設定
+import os
+
+# cookiesファイルの設定
+COOKIES_PATH = '/tmp/youtube.com_cookies.txt'
+if os.getenv('YOUTUBE_COOKIES'):
+    with open(COOKIES_PATH, 'w') as f:
+        f.write(os.getenv('YOUTUBE_COOKIES'))
 
 if __name__ == "__main__":
     import uvicorn
