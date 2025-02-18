@@ -62,3 +62,6 @@ Thumbs.db
 
 # Logs
 *.log
+
+# 機密情報を含むファイルを追加
+client_secret_*.json
