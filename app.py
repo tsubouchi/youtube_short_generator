@@ -169,23 +169,24 @@ async def upload_to_supabase(file_path: str, content_type: str, bucket: str = 'v
     try:
         file_name = f"{uuid.uuid4()}{os.path.splitext(file_path)[1]}"
         
-        # ファイルの読み込みを確認
         if not os.path.exists(file_path):
             raise Exception(f"File not found: {file_path}")
             
         print(f"Uploading file {file_name} to bucket {bucket}")
         
-        # ファイルの読み込み
         with open(file_path, 'rb') as f:
             file_data = f.read()
         
         try:
-            # アップロード処理
+            # アップロード処理を修正
             upload_response = supabase.storage.from_(bucket).upload(
                 path=file_name,
                 file=file_data,
                 file_options={"content-type": content_type}
             )
+            
+            if not upload_response:
+                raise Exception("Upload response is empty")
             
             # URLの取得
             file_url = supabase.storage.from_(bucket).get_public_url(file_name)
@@ -563,12 +564,21 @@ async def process_video(youtube_url: str = Form(...), num_screenshots: int = For
 @app.get("/auth/callback")
 async def auth_callback(request: Request):
     try:
+        site_url = os.getenv("NEXT_PUBLIC_SITE_URL", str(request.base_url).rstrip('/'))
+        
         # ハッシュパラメータがある場合は処理
         if "#" in str(request.url):
-            # クリーンなURLにリダイレクト
-            return RedirectResponse(url="/")
-            
-        return RedirectResponse(url="/")
+            return templates.TemplateResponse("index.html", {
+                "request": request,
+                "config": {
+                    "SUPABASE_URL": os.getenv("SUPABASE_URL"),
+                    "SUPABASE_ANON_KEY": os.getenv("SUPABASE_KEY"),
+                    "SITE_URL": site_url
+                }
+            })
+        
+        # ハッシュがない場合はホームにリダイレクト
+        return RedirectResponse(url=site_url)
         
     except Exception as e:
         print(f"Auth callback error: {str(e)}")

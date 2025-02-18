@@ -131,7 +131,7 @@
     </div>
 
     <script>
-        const SITE_URL = '{{ config.SITE_URL }}';
+        const SITE_URL = '{{ config.SITE_URL }}'.trim();
         
         // Supabaseクライアントの初期化
         const supabaseClient = supabase.createClient(
@@ -142,10 +142,14 @@
         // Google認証ハンドラ
         async function handleGoogleSignIn() {
             try {
+                // 現在のURLがlocalhostかどうかを確認
+                const isLocalhost = window.location.hostname === 'localhost';
+                const redirectUrl = isLocalhost ? 'http://localhost:3000' : 'https://youtube-downloader-rnw5guisn-bonginkan-projects.vercel.app';
+
                 const { data, error } = await supabaseClient.auth.signInWithOAuth({
                     provider: 'google',
                     options: {
-                        redirectTo: `${SITE_URL}/auth/callback`,  // /auth/callbackエンドポイントにリダイレクト
+                        redirectTo: redirectUrl,
                         queryParams: {
                             access_type: 'offline',
                             prompt: 'consent'
@@ -153,10 +157,7 @@
                     }
                 });
 
-                if (error) {
-                    console.error('Error:', error.message);
-                    alert('ログインに失敗しました: ' + error.message);
-                }
+                if (error) throw error;
             } catch (error) {
                 console.error('Error:', error);
                 alert('ログインに失敗しました');
@@ -167,6 +168,10 @@
         supabaseClient.auth.onAuthStateChange((event, session) => {
             if (event === 'SIGNED_IN' && session) {
                 updateUserProfile(session.user);
+                // URLクリーンアップ
+                if (window.location.hash || window.location.search) {
+                    window.history.replaceState({}, document.title, SITE_URL);
+                }
             } else if (event === 'SIGNED_OUT') {
                 updateUserProfile(null);
             }
