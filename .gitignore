@@ -70,3 +70,5 @@ client_secret*.json
 
 # バックアップ
 backup/
+.env*
+!.env.sample
