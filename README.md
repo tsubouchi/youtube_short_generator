@@ -24,6 +24,11 @@ AI_MODEL=gpt-4o-mini-2024-07-18
 
 # データベース設定
 DATABASE_URL=your-database-url
+
+# Google Auth
+NEXT_PUBLIC_SUPABASE_URL=your-project-url
+NEXT_PUBLIC_SUPABASE_ANON_KEY=your-anon-key
+SUPABASE_SERVICE_ROLE_KEY=your-service-role-key
 ```
 
 ## Supabase設定の重要事項
@@ -136,3 +141,24 @@ vercel deploy
 ## ライセンス
 
 MIT License
+
+## Google認証の設定
+
+### 1. Google Cloud Consoleでの設定
+1. [Google Cloud Console](https://console.cloud.google.com/)で新しいプロジェクトを作成
+2. OAuth同意画面を設定
+3. 認証情報 → OAuth 2.0 クライアントIDを作成
+   - 承認済みのリダイレクトURI: `https://[YOUR_SUPABASE_PROJECT].supabase.co/auth/v1/callback`
+
+### 2. Supabaseでの設定
+1. Authentication → Providers → Googleを有効化
+2. Google Cloud ConsoleのクライアントIDとシークレットを設定
+3. Redirect URLをGoogle Cloud Consoleに追加
+
+### 3. 環境変数の追加
+```env
+# Google Auth
+NEXT_PUBLIC_SUPABASE_URL=your-project-url
+NEXT_PUBLIC_SUPABASE_ANON_KEY=your-anon-key
+SUPABASE_SERVICE_ROLE_KEY=your-service-role-key
+```

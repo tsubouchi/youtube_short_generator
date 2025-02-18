@@ -107,21 +107,31 @@ SCREENSHOT_DIR = f"{TEMP_DIR}/screenshots"
 os.makedirs(DOWNLOAD_DIR, exist_ok=True)
 os.makedirs(SCREENSHOT_DIR, exist_ok=True)
 
+# cookiesの設定を追加
+def get_youtube_cookies():
+    cookies_str = os.getenv('YOUTUBE_COOKIES')
+    if not cookies_str:
+        return None
+        
+    cookies_file = '/tmp/youtube.com_cookies.txt'
+    with open(cookies_file, 'w') as f:
+        f.write(cookies_str)
+    return cookies_file
+
 # yt-dlpの設定を更新
 def get_yt_dlp_opts():
-    return {
+    cookies_file = get_youtube_cookies()
+    opts = {
         'format': 'best[ext=mp4]',
         'outtmpl': f'{DOWNLOAD_DIR}/%(id)s.%(ext)s',
         'quiet': True,
         'no_warnings': True,
-        'extractor_args': {
-            'youtube': {
-                'player_client': ['android', 'web'],  # 複数のクライアントタイプを試す
-                'player_skip': ['webpage', 'config'],
-                'skip': ['dash', 'hls']
-            }
-        }
     }
+    
+    if cookies_file:
+        opts['cookiefile'] = cookies_file
+    
+    return opts
 
 def save_to_markdown(video_id: str, url: str, transcription: str, translation: str):
     """結果をMarkdownファイルとして保存する"""
