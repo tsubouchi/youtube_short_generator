@@ -1,6 +1,74 @@
-# YouTube Transcriber
+# YouTube Video Processor
 
-YouTubeの動画を文字起こし・翻訳するWebアプリケーション
+## 最近の更新
+- YouTubeの認証: ブラウザのCookieを直接使用するように改善
+- Supabaseへのファイルアップロード処理を安定化
+
+## 主な機能
+- YouTube動画のダウンロード
+- スクリーンショットの自動生成
+- 文字起こしと翻訳
+- Supabaseでのファイル管理
+
+## 技術的な詳細
+
+### YouTubeの認証
+ブラウザのCookieを直接使用することで、より安定した認証を実現：
+```python
+# yt-dlpの設定
+{
+    'cookiesfrombrowser': ('chrome',),  # ブラウザのCookieを使用
+    'verbose': True,  # デバッグ用
+}
+```
+
+重要なCookie:
+- VISITOR_INFO1_LIVE
+- LOGIN_INFO
+- SID
+- HSID
+- __Secure-1PSID
+
+### Supabaseファイルアップロード
+安定したファイルアップロード処理：
+```python
+async def upload_to_supabase(file_path: str, content_type: str, bucket: str) -> str:
+    with open(file_path, 'rb') as f:
+        file_data = f.read()
+    
+    # アップロード実行
+    response = supabase.storage \
+        .from_(bucket) \
+        .upload(unique_filename, file_data)
+    
+    # 公開URLの取得
+    public_url = supabase.storage \
+        .from_(bucket) \
+        .get_public_url(unique_filename)
+```
+
+## セットアップ
+
+1. 環境変数の設定:
+```env
+SUPABASE_URL=your_supabase_url
+SUPABASE_KEY=your_supabase_key
+OPENAI_API_KEY=your_openai_key
+```
+
+2. 必要なパッケージのインストール:
+```bash
+pip install -r requirements.txt
+```
+
+3. アプリケーションの起動:
+```bash
+vercel dev
+```
+
+## 注意点
+- YouTubeの認証はブラウザのCookieを使用するため、ブラウザにログインしている必要があります
+- Supabaseのストレージバケット'videos'が必要です
 
 ## 機能
 
@@ -18,33 +86,6 @@ YouTubeの動画を文字起こし・翻訳するWebアプリケーション
 - **AI/ML**: OpenAI (Whisper API, GPT-4)
 - **認証**: Supabase Auth (Google OAuth)
 - **ストレージ**: Supabase Storage
-
-## セットアップ
-
-1. **環境変数の設定**:
-```bash
-cp .env.sample .env.development
-```
-
-必要な環境変数:
-```
-SUPABASE_URL=your_supabase_url
-SUPABASE_KEY=your_supabase_anon_key
-OPENAI_API_KEY=your_openai_api_key
-AI_MODEL=gpt-4o-mini-2024-07-18
-GOOGLE_CLIENT_ID=your_google_client_id
-GOOGLE_CLIENT_SECRET=your_google_client_secret
-```
-
-2. **依存関係のインストール**:
-```bash
-pip install -r requirements.txt
-```
-
-3. **開発サーバーの起動**:
-```bash
-uvicorn app:app --reload
-```
 
 ## Supabaseの設定
 
@@ -110,149 +151,6 @@ MIT
 ## 作者
 
 ボンポン
-
-## 最近の更新
-
-- Supabaseストレージのアップロード処理を改善
-- エラーハンドリングの強化
-- UI/UXの改善
-
-## セキュリティ注意事項
-
-- `service_role`キーは公開しない
-- 本番環境では適切なRLSポリシーを設定
-- 環境変数は適切に管理
-
-## Google認証の実装方法
-
-1. **Supabaseでの設定**:
-   - Supabaseプロジェクトの認証設定でGoogleプロバイダーを有効化
-   - Google Cloud Consoleで認証情報を作成し、クライアントIDとシークレットを取得
-   - Supabaseの認証設定にGoogle認証情報を設定
-
-2. **環境変数の設定**:
-   ```bash
-   # .env.development
-   SUPABASE_URL=your_supabase_url
-   SUPABASE_KEY=your_supabase_anon_key
-   GOOGLE_CLIENT_ID=your_google_client_id
-   GOOGLE_CLIENT_SECRET=your_google_client_secret
-   ```
-
-3. **フロントエンド実装**:
-   ```html
-   <!-- Supabase JSクライアントの読み込み -->
-   <script src="https://unpkg.com/@supabase/supabase-js@2"></script>
-
-   <!-- ログインボタン -->
-   <button onclick="handleGoogleSignIn()" class="bg-blue-500 text-white px-4 py-2 rounded">
-       Googleでログイン
-   </button>
-
-   <script>
-   // Supabaseクライアントの初期化
-   const supabase = supabase.createClient(
-       '{{ config.SUPABASE_URL }}',
-       '{{ config.SUPABASE_ANON_KEY }}'
-   );
-
-   // Google認証ハンドラ
-   async function handleGoogleSignIn() {
-       const { data, error } = await supabase.auth.signInWithOAuth({
-           provider: 'google',
-           options: {
-               redirectTo: window.location.origin
-           }
-       });
-
-       if (error) {
-           console.error('Error:', error.message);
-           alert('ログインに失敗しました: ' + error.message);
-       }
-   }
-   </script>
-   ```
-
-4. **バックエンド実装**:
-   ```python
-   @app.get("/auth/callback")
-   async def auth_callback(request: Request):
-       try:
-           # セッショントークンの取得
-           access_token = request.cookies.get("sb-access-token")
-           refresh_token = request.cookies.get("sb-refresh-token")
-           
-           if not access_token:
-               raise HTTPException(status_code=401, detail="No session token")
-               
-           return RedirectResponse(url="/")
-           
-       except Exception as e:
-           print(f"Auth callback error: {str(e)}")
-           raise HTTPException(status_code=400, detail=str(e))
-   ```
-
-# YouTube Transcriber
-
-## 環境設定
-
-### Supabase設定
-1. **URL Configuration**:
-   - Site URL: `https://youtube-downloader-rnw5guisn-bonginkan-projects.vercel.app`
-   - Redirect URLs:
-     - `http://localhost:3000`
-     - `https://youtube-downloader-rnw5guisn-bonginkan-projects.vercel.app/auth/callback`
-
-2. **環境変数**:
-   ```bash
-   # 開発環境 (.env.development)
-   NEXT_PUBLIC_SITE_URL=http://localhost:3000
-
-   # 本番環境 (Vercel)
-   NEXT_PUBLIC_SITE_URL=https://youtube-downloader-rnw5guisn-bonginkan-projects.vercel.app
-   ```
-
-### 認証フロー
-1. ユーザーがログインボタンをクリック
-2. Googleログイン画面表示
-3. 認証後、環境に応じたURLにリダイレクト:
-   - 開発環境: `http://localhost:3000`
-   - 本番環境: `https://youtube-downloader-rnw5guisn-bonginkan-projects.vercel.app`
-
-### ファイルアップロード
-1. **一時ファイルの保存**:
-   ```python
-   TEMP_DIR = "/tmp"
-   DOWNLOAD_DIR = f"{TEMP_DIR}/downloads"
-   SCREENSHOT_DIR = f"{TEMP_DIR}/screenshots"
-   ```
-
-2. **Supabaseストレージ**:
-   - バケット: `videos`
-   - アップロード処理:
-     ```python
-     upload_response = supabase.storage.from_(bucket).upload(
-         path=file_name,
-         file=file_data,
-         file_options={"content-type": content_type}
-     )
-     ```
-
-## 開発環境
-1. **ローカル開発**:
-   ```bash
-   vercel dev
-   ```
-
-2. **本番デプロイ**:
-   ```bash
-   vercel deploy --prod
-   ```
-
-## 注意点
-1. 環境変数は`.env.development`と`.env`で管理
-2. Supabaseの設定は開発/本番環境で共通
-3. 認証コールバックは環境に応じて動的に切り替え
 
 ## 詳細設定ガイド
 

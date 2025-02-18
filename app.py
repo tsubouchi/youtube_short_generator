@@ -116,22 +116,67 @@ SCREENSHOT_DIR = f"{TEMP_DIR}/screenshots"
 os.makedirs(DOWNLOAD_DIR, exist_ok=True)
 os.makedirs(SCREENSHOT_DIR, exist_ok=True)
 
+# YouTube cookiesの設定を改善
+async def get_youtube_cookies():
+    try:
+        cookies_str = os.getenv('YOUTUBE_COOKIES', '')
+        if cookies_str:
+            cookies_path = '/tmp/youtube.com_cookies.txt'
+            # Netscape形式でCookieファイルを作成
+            with open(cookies_path, 'w') as f:
+                f.write("# Netscape HTTP Cookie File\n")
+                f.write("# https://curl.haxx.se/rfc/cookie_spec.html\n")
+                f.write("# This is a generated file!  Do not edit.\n\n")
+                
+                # 各Cookieを正しい形式で書き込み
+                cookies = cookies_str.split(';')
+                for cookie in cookies:
+                    if '=' in cookie:
+                        name, value = cookie.strip().split('=', 1)
+                        f.write(f".youtube.com\tTRUE\t/\tTRUE\t2147483647\t{name}\t{value}\n")
+            
+            print(f"Cookie file created at: {cookies_path}")
+            return cookies_path
+        return None
+    except Exception as e:
+        print(f"Cookie設定エラー: {str(e)}")
+        return None
+
 # yt-dlpの設定を更新
-def get_yt_dlp_opts():
-    return {
-        'format': 'best[ext=mp4]',
-        'outtmpl': f'{DOWNLOAD_DIR}/%(id)s.%(ext)s',
-        'quiet': True,
-        'no_warnings': True,
-        'cookies_from_browser': 'chrome',  # ブラウザのcookiesを使用
-        'extractor_args': {
-            'youtube': {
-                'player_client': ['android', 'web'],
-                'player_skip': ['webpage', 'config'],
-                'skip': ['dash', 'hls']
+async def get_yt_dlp_opts():
+    try:
+        # ブラウザのCookieパスを取得
+        import browser_cookie3
+        chrome_cookies = browser_cookie3.chrome(domain_name='youtube.com')
+        cookie_count = len(list(chrome_cookies))
+        print(f"Debug: Found {cookie_count} Chrome cookies for youtube.com")
+        
+        # 重要なCookieの存在確認
+        important_cookies = ['VISITOR_INFO1_LIVE', 'LOGIN_INFO', 'SID', 'HSID', '__Secure-1PSID']
+        found_cookies = [cookie.name for cookie in chrome_cookies if cookie.name in important_cookies]
+        print(f"Debug: Found important cookies: {found_cookies}")
+        
+        opts = {
+            'format': 'best[ext=mp4]',
+            'outtmpl': f'{DOWNLOAD_DIR}/%(id)s.%(ext)s',
+            'quiet': False,  # デバッグのため詳細ログを有効化
+            'no_warnings': False,  # 警告も表示
+            'cookiesfrombrowser': ('chrome',),
+            'verbose': True,  # より詳細なログを表示
+            'extractor_args': {
+                'youtube': {
+                    'player_client': ['android', 'web'],
+                    'player_skip': ['webpage', 'config'],
+                    'skip': ['dash', 'hls']
+                }
             }
         }
-    }
+        print(f"Debug: yt-dlp options configured: {opts}")
+        return opts
+        
+    except Exception as e:
+        print(f"Debug: Error in get_yt_dlp_opts: {str(e)}")
+        raise
 
 def save_to_markdown(video_id: str, url: str, transcription: str, translation: str):
     """結果をMarkdownファイルとして保存する"""
@@ -166,36 +211,40 @@ def extract_video_id(url: str) -> str:
     except Exception:
         return datetime.now().strftime("%Y%m%d_%H%M%S")
 
-async def upload_to_supabase(file_path: str, content_type: str, bucket: str = 'videos') -> str:
+async def upload_to_supabase(file_path: str, content_type: str, bucket: str) -> str:
     try:
-        file_name = f"{uuid.uuid4()}{os.path.splitext(file_path)[1]}"
-        
+        # ファイルの存在確認
         if not os.path.exists(file_path):
             raise Exception(f"File not found: {file_path}")
-            
-        print(f"Uploading file {file_name} to bucket {bucket}")
         
+        # ファイル名の生成
+        file_extension = os.path.splitext(file_path)[1]
+        unique_filename = f"{str(uuid.uuid4())}{file_extension}"
+        
+        print(f"Uploading file {unique_filename} to bucket {bucket}")
+        
+        # ファイルを読み込んでアップロード
         with open(file_path, 'rb') as f:
             file_data = f.read()
-            
-        # アップロード処理
-        storage = supabase.storage.from_(bucket)
         
-        # ファイルをアップロード
-        result = storage.upload(
-            path=file_name,
-            file=file_data,
-            file_options={"contentType": content_type}
-        )
+        # アップロード実行（withブロックの外で実行）
+        response = supabase.storage \
+            .from_(bucket) \
+            .upload(unique_filename, file_data)
         
-        if not result:
+        if not response:
             raise Exception("Upload failed: No response from storage")
-            
-        # 公開URLを取得
-        file_url = storage.get_public_url(file_name)
-        print(f"File uploaded successfully: {file_url}")
         
-        return file_url
+        # 公開URLの生成
+        public_url = supabase.storage \
+            .from_(bucket) \
+            .get_public_url(unique_filename)
+        
+        if not public_url:
+            raise Exception("Failed to get public URL")
+            
+        print(f"File uploaded successfully: {public_url}")
+        return public_url
         
     except Exception as e:
         print(f"Upload error details: {str(e)}")
@@ -275,38 +324,33 @@ async def update_project_status(project_id: str, status: str, error_message: str
         print(f"ステータス更新エラー: {str(e)}")
 
 # 動画からスクリーンショットを生成する関数
-async def generate_screenshots(video_path: str, num_screenshots: int = 3) -> list:
+async def generate_screenshots(video_path: str, num_screenshots: int) -> List[str]:
     try:
-        # 動画の長さを取得
-        probe = ffmpeg.probe(video_path)
-        duration = float(probe['streams'][0]['duration'])
-        
-        # スクリーンショットを撮る時間間隔を計算
-        interval = duration / (num_screenshots + 1)
-        
-        screenshots = []
+        screenshot_urls = []
         for i in range(num_screenshots):
-            timestamp = interval * (i + 1)
-            output_path = f"/tmp/screenshots/{uuid.uuid4()}.jpg"
-            os.makedirs(os.path.dirname(output_path), exist_ok=True)
+            # スクリーンショットの生成
+            screenshot_path = os.path.join(SCREENSHOT_DIR, f"{uuid.uuid4()}.jpg")
             
-            # FFmpegでスクリーンショットを生成
+            # FFmpegコマンドの実行
+            timestamp = i * 30  # 30秒間隔でスクリーンショットを生成
             stream = ffmpeg.input(video_path, ss=timestamp)
-            stream = ffmpeg.output(stream, output_path, vframes=1)
-            ffmpeg.run(stream, overwrite_output=True)
+            stream = ffmpeg.output(stream, screenshot_path, vframes=1)
+            ffmpeg.run(stream)
             
-            # スクリーンショットをSupabaseにアップロード
+            # Supabaseにアップロード
             screenshot_url = await upload_to_supabase(
-                output_path, 
-                'image/jpeg'
+                screenshot_path,
+                'image/jpeg',
+                'videos'  # バケット名を明示的に指定
             )
-            screenshots.append(screenshot_url)
             
-            # 一時ファイルを削除
-            os.remove(output_path)
+            screenshot_urls.append(screenshot_url)
+            os.remove(screenshot_path)  # 一時ファイルを削除
             
-        return screenshots
+        return screenshot_urls
+        
     except Exception as e:
+        print(f"Error generating screenshots: {str(e)}")
         raise Exception(f"スクリーンショットの生成に失敗しました: {str(e)}")
 
 # OpenAI APIによる文字起こしと翻訳を修正
@@ -417,6 +461,8 @@ async def index(request: Request):
 @app.post("/process")
 async def process_video(youtube_url: str = Form(...), num_screenshots: int = Form(3)):
     try:
+        print(f"Debug: Starting video processing for URL: {youtube_url}")
+        
         # 動画の長さをチェック
         video_info = await check_video_duration(youtube_url)
         if not video_info['is_valid']:
@@ -445,17 +491,23 @@ async def process_video(youtube_url: str = Form(...), num_screenshots: int = For
             await log_processing_status(video['id'], 'processing', '処理を開始しました')
 
             # 動画のダウンロードと保存
-            temp_video_file = f"{DOWNLOAD_DIR}/{video_info['id']}.mp4"
-            os.makedirs(DOWNLOAD_DIR, exist_ok=True)
-
-            with yt_dlp.YoutubeDL(get_yt_dlp_opts()) as ydl:
+            ydl_opts = await get_yt_dlp_opts()
+            print(f"Debug: Using yt-dlp options: {ydl_opts}")
+            
+            with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                print("Debug: Attempting to extract video info...")
                 info = ydl.extract_info(youtube_url, download=True)
                 if not info:
-                    raise Exception("動画のダウンロードに失敗しました")
-
+                    raise Exception("動画情報の取得に失敗しました")
+                print(f"Debug: Successfully extracted video info for ID: {info.get('id')}")
+                
+                # ダウンロードされたファイルのパスを取得
+                downloaded_file = os.path.join(DOWNLOAD_DIR, f"{info['id']}.mp4")
+                print(f"Debug: Downloaded file path: {downloaded_file}")
+                
             # Supabaseに動画をアップロード
             video_path = await upload_to_supabase(
-                temp_video_file, 
+                downloaded_file,
                 'video/mp4',
                 'videos'
             )
@@ -466,10 +518,10 @@ async def process_video(youtube_url: str = Form(...), num_screenshots: int = For
             }).eq('id', video['id']).execute()
 
             # スクリーンショットの生成と保存
-            screenshots = await generate_screenshots(temp_video_file, num_screenshots)
+            screenshots = await generate_screenshots(downloaded_file, num_screenshots)
 
             # 文字起こしと翻訳を実行
-            transcription, translation = await transcribe_and_translate(temp_video_file)
+            transcription, translation = await transcribe_and_translate(downloaded_file)
 
             # ビデオ情報を更新
             supabase.table('videos').update({
@@ -495,7 +547,7 @@ async def process_video(youtube_url: str = Form(...), num_screenshots: int = For
             await log_processing_status(video['id'], 'completed', '処理が完了しました')
 
             # 一時ファイルの削除
-            os.remove(temp_video_file)
+            os.remove(downloaded_file)
 
             return JSONResponse({
                 'success': True,

@@ -13,7 +13,6 @@ venv/
 .env
 .env.local
 .env.development
-.env.preview
 .env.production
 !.env.sample
 
@@ -65,3 +64,9 @@ Thumbs.db
 
 # 機密情報を含むファイルを追加
 client_secret*.json
+
+# 一時ファイル
+*.jpg
+
+# バックアップ
+backup/

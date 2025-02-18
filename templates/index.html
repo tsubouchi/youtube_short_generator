@@ -4,6 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>YouTube Transcriber</title>
+    <link rel="icon" type="image/x-icon" href="{{ url_for('static', path='favicon.ico') }}">
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://accounts.google.com/gsi/client" async defer></script>
     <script src="https://unpkg.com/@supabase/supabase-js@2"></script>
@@ -141,20 +142,29 @@
         // Supabaseクライアントの初期化
         const supabaseClient = supabase.createClient(
             '{{ config.SUPABASE_URL }}',
-            '{{ config.SUPABASE_ANON_KEY }}'
+            '{{ config.SUPABASE_ANON_KEY }}',
+            {
+                auth: {
+                    // 本番環境のドメインを追加
+                    cookieOptions: {
+                        domain: window.location.hostname,
+                        sameSite: 'Lax',
+                        secure: true
+                    },
+                    persistSession: true,
+                    autoRefreshToken: true,
+                    detectSessionInUrl: true
+                }
+            }
         );
 
         // Google認証ハンドラ
         async function handleGoogleSignIn() {
             try {
-                // 現在のURLがlocalhostかどうかを確認
-                const isLocalhost = window.location.hostname === 'localhost';
-                const redirectUrl = isLocalhost ? 'http://localhost:3000' : 'https://youtube-downloader-rnw5guisn-bonginkan-projects.vercel.app';
-
                 const { data, error } = await supabaseClient.auth.signInWithOAuth({
                     provider: 'google',
                     options: {
-                        redirectTo: redirectUrl,
+                        redirectTo: window.location.origin + '/auth/callback',
                         queryParams: {
                             access_type: 'offline',
                             prompt: 'consent'
