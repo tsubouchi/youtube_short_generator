@@ -14,3 +14,7 @@ urllib3==2.2.0
 ffmpeg-python==0.2.0
 browser-cookie3==0.20.1
 lz4==4.4.3
+google-api-python-client==2.108.0
+google-auth-httplib2==0.1.1
+google-auth-oauthlib==1.1.0
+isodate==0.6.1
