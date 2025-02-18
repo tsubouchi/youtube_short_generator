@@ -432,7 +432,14 @@ async def log_processing_status(video_id: str, status: str, message: Optional[st
 
 @app.get("/")
 async def index(request: Request):
-    return templates.TemplateResponse("index.html", {"request": request})
+    return templates.TemplateResponse("index.html", {
+        "request": request,
+        "config": {
+            "SUPABASE_URL": os.getenv("SUPABASE_URL"),
+            "SUPABASE_ANON_KEY": os.getenv("SUPABASE_KEY"),
+            "GOOGLE_CLIENT_ID": os.getenv("GOOGLE_CLIENT_ID")
+        }
+    })
 
 @app.post("/process")
 async def process_video(youtube_url: str = Form(...), num_screenshots: int = Form(3)):
@@ -558,10 +565,18 @@ if os.getenv('YOUTUBE_COOKIES'):
 
 if __name__ == "__main__":
     import uvicorn
-    # ポート8000で起動するように変更
+    import os
+
+    # 環境変数からホストとポートを取得（デフォルト値付き）
+    host = os.getenv("HOST", "0.0.0.0")
+    port = int(os.getenv("PORT", 3000))
+    
+    # 開発環境かどうかを確認
+    is_dev = os.getenv("VERCEL_ENV") == "development"
+    
     uvicorn.run(
         app,
-        host="0.0.0.0",
-        port=8000,
-        reload=True  # 開発時の自動リロードを有効化
+        host=host,
+        port=port,
+        reload=is_dev  # 開発環境の場合のみreloadを有効化
     )
