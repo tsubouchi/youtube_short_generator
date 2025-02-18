@@ -145,7 +145,11 @@
                 const { data, error } = await supabaseClient.auth.signInWithOAuth({
                     provider: 'google',
                     options: {
-                        redirectTo: '{{ config.SITE_URL }}'  // 環境変数から取得したURLを使用
+                        redirectTo: `${SITE_URL}/auth/callback`,  // /auth/callbackエンドポイントにリダイレクト
+                        queryParams: {
+                            access_type: 'offline',
+                            prompt: 'consent'
+                        }
                     }
                 });
 
