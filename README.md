@@ -162,3 +162,34 @@ NEXT_PUBLIC_SUPABASE_URL=your-project-url
 NEXT_PUBLIC_SUPABASE_ANON_KEY=your-anon-key
 SUPABASE_SERVICE_ROLE_KEY=your-service-role-key
 ```
+
+## Google OAuth設定
+
+### 認証情報
+```json
+{
+  "web": {
+    "client_id": "your-google-client-id",
+    "project_id": "velvety-pagoda-451303-m6",
+    "auth_uri": "https://accounts.google.com/o/oauth2/auth",
+    "token_uri": "https://oauth2.googleapis.com/token",
+    "auth_provider_x509_cert_url": "https://www.googleapis.com/oauth2/v1/certs",
+    "client_secret": "your-google-client-secret",
+    "redirect_uris": [
+      "http://localhost:8000/auth/google/callback",
+      "https://youtube-downloader-dun.vercel.app/auth/google/callback",
+      "https://ygxobaodxtmbmxowidoh.supabase.co/auth/v1/callback"
+    ],
+    "javascript_origins": [
+      "http://localhost:8000",
+      "https://youtube-downloader-dun.vercel.app"
+    ]
+  }
+}
+```
+
+### 環境変数設定
+```env
+GOOGLE_CLIENT_ID=your-google-client-id
+GOOGLE_CLIENT_SECRET=your-google-client-secret
+```
