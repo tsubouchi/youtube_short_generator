@@ -4,7 +4,6 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>YouTube Transcriber</title>
-    <link rel="icon" type="image/x-icon" href="{{ url_for('static', path='favicon.ico') }}">
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://accounts.google.com/gsi/client" async defer></script>
     <script src="https://unpkg.com/@supabase/supabase-js@2"></script>
@@ -68,7 +67,7 @@
         <div id="processContainer" style="display: none;">
             <!-- 入力フォーム -->
             <div class="max-w-2xl mx-auto mb-8">
-                <form id="processForm" class="space-y-4" onsubmit="handleSubmit(event)">
+                <form id="processForm" class="space-y-4">
                     <div>
                         <input type="text" 
                                id="youtube_url" 
@@ -142,29 +141,20 @@
         // Supabaseクライアントの初期化
         const supabaseClient = supabase.createClient(
             '{{ config.SUPABASE_URL }}',
-            '{{ config.SUPABASE_ANON_KEY }}',
-            {
-                auth: {
-                    // 本番環境のドメインを追加
-                    cookieOptions: {
-                        domain: window.location.hostname,
-                        sameSite: 'Lax',
-                        secure: true
-                    },
-                    persistSession: true,
-                    autoRefreshToken: true,
-                    detectSessionInUrl: true
-                }
-            }
+            '{{ config.SUPABASE_ANON_KEY }}'
         );
 
         // Google認証ハンドラ
         async function handleGoogleSignIn() {
             try {
+                // 現在のURLがlocalhostかどうかを確認
+                const isLocalhost = window.location.hostname === 'localhost';
+                const redirectUrl = isLocalhost ? 'http://localhost:3000' : 'https://youtube-downloader-rnw5guisn-bonginkan-projects.vercel.app';
+
                 const { data, error } = await supabaseClient.auth.signInWithOAuth({
                     provider: 'google',
                     options: {
-                        redirectTo: window.location.origin + '/auth/callback',
+                        redirectTo: redirectUrl,
                         queryParams: {
                             access_type: 'offline',
                             prompt: 'consent'
@@ -232,20 +222,19 @@
             menu.classList.toggle('active');
         }
 
-        // フォームの送信処理
+        // フォームの送信処理を追加
         document.getElementById('processForm').addEventListener('submit', async (e) => {
             e.preventDefault();
-            
-            // UI初期化
-            document.getElementById('loading').classList.add('active');
-            document.getElementById('result').classList.add('hidden');
-            document.getElementById('error').classList.add('hidden');
             
             const formData = new FormData();
             formData.append('youtube_url', document.getElementById('youtube_url').value);
             formData.append('num_screenshots', document.getElementById('num_screenshots').value);
             
             try {
+                document.getElementById('loading').classList.add('active');
+                document.getElementById('result').classList.add('hidden');
+                document.getElementById('error').classList.add('hidden');
+                
                 const response = await fetch('/process', {
                     method: 'POST',
                     body: formData
