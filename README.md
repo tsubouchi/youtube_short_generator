@@ -205,3 +205,65 @@ MIT License
            print(f"Auth callback error: {str(e)}")
            raise HTTPException(status_code=400, detail=str(e))
    ```
+
+# YouTube Transcriber
+
+## 環境設定
+
+### Supabase設定
+1. **URL Configuration**:
+   - Site URL: `https://youtube-downloader-rnw5guisn-bonginkan-projects.vercel.app`
+   - Redirect URLs:
+     - `http://localhost:3000`
+     - `https://youtube-downloader-rnw5guisn-bonginkan-projects.vercel.app/auth/callback`
+
+2. **環境変数**:
+   ```bash
+   # 開発環境 (.env.development)
+   NEXT_PUBLIC_SITE_URL=http://localhost:3000
+
+   # 本番環境 (Vercel)
+   NEXT_PUBLIC_SITE_URL=https://youtube-downloader-rnw5guisn-bonginkan-projects.vercel.app
+   ```
+
+### 認証フロー
+1. ユーザーがログインボタンをクリック
+2. Googleログイン画面表示
+3. 認証後、環境に応じたURLにリダイレクト:
+   - 開発環境: `http://localhost:3000`
+   - 本番環境: `https://youtube-downloader-rnw5guisn-bonginkan-projects.vercel.app`
+
+### ファイルアップロード
+1. **一時ファイルの保存**:
+   ```python
+   TEMP_DIR = "/tmp"
+   DOWNLOAD_DIR = f"{TEMP_DIR}/downloads"
+   SCREENSHOT_DIR = f"{TEMP_DIR}/screenshots"
+   ```
+
+2. **Supabaseストレージ**:
+   - バケット: `videos`
+   - アップロード処理:
+     ```python
+     upload_response = supabase.storage.from_(bucket).upload(
+         path=file_name,
+         file=file_data,
+         file_options={"content-type": content_type}
+     )
+     ```
+
+## 開発環境
+1. **ローカル開発**:
+   ```bash
+   vercel dev
+   ```
+
+2. **本番デプロイ**:
+   ```bash
+   vercel deploy --prod
+   ```
+
+## 注意点
+1. 環境変数は`.env.development`と`.env`で管理
+2. Supabaseの設定は開発/本番環境で共通
+3. 認証コールバックは環境に応じて動的に切り替え
