@@ -528,18 +528,21 @@ async def auth_callback(request: Request):
     try:
         site_url = os.getenv("NEXT_PUBLIC_SITE_URL", str(request.base_url).rstrip('/'))
         
-        # ハッシュパラメータがある場合は処理
+        # 環境に応じたCookieドメインを設定
+        cookie_domain = os.getenv("COOKIE_DOMAIN", "localhost")
+        
+        # セッショントークンの取得と設定
         if "#" in str(request.url):
             return templates.TemplateResponse("index.html", {
                 "request": request,
                 "config": {
                     "SUPABASE_URL": os.getenv("SUPABASE_URL"),
                     "SUPABASE_ANON_KEY": os.getenv("SUPABASE_KEY"),
-                    "SITE_URL": site_url
+                    "SITE_URL": site_url,
+                    "COOKIE_DOMAIN": cookie_domain
                 }
             })
         
-        # ハッシュがない場合はホームにリダイレクト
         return RedirectResponse(url=site_url)
         
     except Exception as e:
