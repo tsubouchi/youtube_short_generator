@@ -58,9 +58,7 @@
         
         <!-- ログインコンテナ -->
         <div id="loginContainer" class="text-center mb-8">
-            <button onclick="handleGoogleSignIn()" class="bg-blue-500 text-white px-4 py-2 rounded">
-                Googleでログイン
-            </button>
+            <!-- Google認証ボタンと関連コードを削除 -->
         </div>
 
         <!-- 処理フォーム（初期状態は非表示） -->
@@ -138,50 +136,7 @@
     <script>
         const SITE_URL = '{{ config.SITE_URL }}'.trim();
         
-        // Supabaseクライアントの初期化
-        const supabaseClient = supabase.createClient(
-            '{{ config.SUPABASE_URL }}',
-            '{{ config.SUPABASE_ANON_KEY }}'
-        );
-
-        // Google認証ハンドラ
-        async function handleGoogleSignIn() {
-            try {
-                // 現在のURLがlocalhostかどうかを確認
-                const isLocalhost = window.location.hostname === 'localhost';
-                const redirectUrl = isLocalhost ? 'http://localhost:3000' : 'https://youtube-downloader-rnw5guisn-bonginkan-projects.vercel.app';
-
-                const { data, error } = await supabaseClient.auth.signInWithOAuth({
-                    provider: 'google',
-                    options: {
-                        redirectTo: redirectUrl,
-                        queryParams: {
-                            access_type: 'offline',
-                            prompt: 'consent'
-                        }
-                    }
-                });
-
-                if (error) throw error;
-            } catch (error) {
-                console.error('Error:', error);
-                alert('ログインに失敗しました');
-            }
-        }
-
-        // セッション監視
-        supabaseClient.auth.onAuthStateChange((event, session) => {
-            if (event === 'SIGNED_IN' && session) {
-                updateUserProfile(session.user);
-                
-                // URLクリーンアップ
-                if (window.location.hash || window.location.search) {
-                    window.history.replaceState({}, document.title, SITE_URL);
-                }
-            } else if (event === 'SIGNED_OUT') {
-                updateUserProfile(null);
-            }
-        });
+        // Supabase認証も削除
 
         // ユーザープロフィールの更新
         function updateUserProfile(user) {
@@ -205,11 +160,7 @@
         // ログアウト処理
         async function handleSignOut() {
             try {
-                const { error } = await supabaseClient.auth.signOut();
-                if (error) throw error;
-                
-                updateUserProfile(null);
-                location.reload();
+                // ログアウト処理の実装
             } catch (error) {
                 console.error('Error signing out:', error);
                 alert('ログアウトに失敗しました: ' + error.message);

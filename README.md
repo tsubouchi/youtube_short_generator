@@ -226,3 +226,19 @@ MIT
    PORT=3000
    VERCEL_ENV=production
    ```
+
+## クッキーの設定方法
+
+1. Chromeで [YouTube](https://www.youtube.com) にアクセスしてログイン
+2. Chrome開発者ツール（F12）を開く
+3. Application > Cookies > https://youtube.com
+4. 必要なクッキー（特に 'SID', 'HSID', 'SSID', 'APISID', 'SAPISID'）をコピー
+5. `.env.production`ファイルに以下の形式で設定:
+   ```
+   YOUTUBE_COOKIES=SID=your_sid; HSID=your_hsid; SSID=your_ssid; ...
+   ```
+6. Vercelにデプロイ時、環境変数として`YOUTUBE_COOKIES`を設定
+
+## 注意事項
+- クッキーは定期的に更新が必要な場合があります
+- クッキーは機密情報として扱い、安全に管理してください

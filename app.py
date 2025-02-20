@@ -13,11 +13,6 @@ import certifi
 import urllib3
 from supabase import create_client, Client
 from dotenv import load_dotenv
-from googleapiclient.discovery import build
-from google.oauth2.credentials import Credentials
-from googleapiclient.errors import HttpError
-from yt_dlp.utils import std_headers
-import browser_cookie3
 
 # Python標準ライブラリ
 import os
@@ -30,28 +25,18 @@ from io import BytesIO
 from datetime import datetime, timezone
 from typing import Optional, List, Dict
 from fastapi import HTTPException
-import traceback
 
 # 環境変数の読み込みと検証を関数化
 def load_environment():
     load_dotenv('.env.development')  # 明示的に.env.developmentを読み込む
     
-    youtube_api_key = os.getenv('YOUTUBE_API_KEY')
-    if not youtube_api_key:
-        raise ValueError("YOUTUBE_API_KEY is not set")
-        
-    # 完全なキーの場合のみチェック（開発時のプレースホルダーは許可）
-    if youtube_api_key.startswith('AIzaSyC...') and len(youtube_api_key) <= 10:
-        raise ValueError("Invalid YOUTUBE_API_KEY format")
-        
     required_vars = {
         'SUPABASE_URL': os.getenv('SUPABASE_URL'),
         'SUPABASE_KEY': os.getenv('SUPABASE_KEY'),
         'OPENAI_API_KEY': os.getenv('OPENAI_API_KEY'),
         'AI_MODEL': os.getenv('AI_MODEL', 'gpt-4o-mini-2024-07-18'),
         'GOOGLE_CLIENT_ID': os.getenv('GOOGLE_CLIENT_ID'),
-        'GOOGLE_CLIENT_SECRET': os.getenv('GOOGLE_CLIENT_SECRET'),
-        'YOUTUBE_API_KEY': youtube_api_key
+        'GOOGLE_CLIENT_SECRET': os.getenv('GOOGLE_CLIENT_SECRET')
     }
     
     # 必須の環境変数が設定されているか確認
@@ -69,9 +54,11 @@ def load_environment():
 # 環境変数を読み込み
 try:
     env_vars = load_environment()
-    print("Debug: Environment variables loaded:")
-    print(f"Debug: YOUTUBE_API_KEY: {env_vars['YOUTUBE_API_KEY'][:10]}...")
-    YOUTUBE_API_KEY = env_vars['YOUTUBE_API_KEY']
+    supabase_url = env_vars['SUPABASE_URL']
+    supabase_key = env_vars['SUPABASE_KEY']
+    openai.api_key = env_vars['OPENAI_API_KEY']
+    ai_model = env_vars['AI_MODEL']
+    print("Environment variables loaded successfully")
 except Exception as e:
     print(f"Environment variable error: {str(e)}")
     raise
@@ -86,8 +73,8 @@ app.mount("/static", StaticFiles(directory="static"), name="static")
 templates = Jinja2Templates(directory="templates")
 
 # Supabaseの設定
-supabase_url = env_vars['SUPABASE_URL']
-supabase_key = env_vars['SUPABASE_KEY']
+supabase_url = supabase_url
+supabase_key = supabase_key
 
 if not supabase_url or not supabase_key:
     raise Exception("Supabase環境変数が設定されていません")
@@ -129,83 +116,13 @@ SCREENSHOT_DIR = f"{TEMP_DIR}/screenshots"
 os.makedirs(DOWNLOAD_DIR, exist_ok=True)
 os.makedirs(SCREENSHOT_DIR, exist_ok=True)
 
-# YouTube cookiesの設定を改善
-def get_youtube_cookies():
-    try:
-        # Chrome/Chromiumのクッキーを取得
-        cookies = browser_cookie3.chrome(domain_name='.youtube.com')
-        return cookies
-    except:
-        try:
-            # Firefoxのクッキーを取得
-            cookies = browser_cookie3.firefox(domain_name='.youtube.com')
-            return cookies
-        except:
-            return None
-
 # yt-dlpの設定を更新
-async def get_yt_dlp_opts():
-    try:
-        print(f"Debug: Current environment: {os.getenv('VERCEL_ENV', 'unknown')}")
-        
-        # 共通のオプション
-        opts = {
-            'format': 'best[ext=mp4]',
-            'outtmpl': f'{DOWNLOAD_DIR}/%(id)s.%(ext)s',
-            'quiet': False,
-            'no_warnings': False,
-            'verbose': True,
-            'debug': True,
-            # loggerはJSON化できないのでデバッグ出力時は除外
-            'logger': CustomLogger(),
-            # 最新のChrome User-Agent
-            'user_agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36',
-        }
-
-        # 環境変数からCookieを取得
-        cookies_str = os.getenv('YOUTUBE_COOKIES')
-        if cookies_str:
-            print("Debug: Using environment cookies")
-            cookies_path = '/tmp/youtube.com_cookies.txt'
-            
-            # Netscape形式でCookieファイルを作成
-            with open(cookies_path, 'w') as f:
-                f.write("# Netscape HTTP Cookie File\n")
-                f.write("# https://curl.haxx.se/rfc/cookie_spec.html\n")
-                f.write("# This is a generated file!  Do not edit.\n\n")
-                
-                for cookie in cookies_str.split(';'):
-                    if '=' in cookie:
-                        name, value = cookie.strip().split('=', 1)
-                        f.write(f".youtube.com\tTRUE\t/\tTRUE\t2147483647\t{name}\t{value}\n")
-            
-            opts['cookies'] = cookies_path
-        else:
-            print("Debug: No cookies found in environment")
-
-        # デバッグ出力用にloggerを除外したオプションを作成
-        debug_opts = opts.copy()
-        debug_opts.pop('logger', None)
-        print(f"Debug: Final yt-dlp options: {json.dumps(debug_opts, indent=2)}")
-        
-        return opts
-        
-    except Exception as e:
-        print(f"Debug: Error in get_yt_dlp_opts: {str(e)}")
-        print(f"Debug: Error traceback: {traceback.format_exc()}")
-        raise
-
-# カスタムロガーの追加
-class CustomLogger:
-    def debug(self, msg):
-        if msg.startswith('[debug] '):
-            print(f"YT-DLP Debug: {msg}")
-    
-    def warning(self, msg):
-        print(f"YT-DLP Warning: {msg}")
-    
-    def error(self, msg):
-        print(f"YT-DLP Error: {msg}")
+ydl_opts = {
+    'format': 'best',
+    'cookiesfrombrowser': ('chrome',),  # Chromeのクッキーを使用
+    'verbose': True,
+    'outtmpl': os.path.join(DOWNLOAD_DIR, '%(id)s.%(ext)s'),
+}
 
 def save_to_markdown(video_id: str, url: str, transcription: str, translation: str):
     """結果をMarkdownファイルとして保存する"""
@@ -254,13 +171,9 @@ async def upload_to_supabase(file_path: str, content_type: str, bucket: str = 'v
             
         # アップロード処理
         storage = supabase.storage.from_(bucket)
-        result = storage.upload(
-            path=file_name,
-            file=file_data,
-            file_options={"contentType": content_type}
-        )
+        response = storage.upload(file_name, file_data)
         
-        if not result:
+        if not response:
             raise Exception("Upload failed: No response from storage")
             
         # 公開URLを取得
@@ -347,33 +260,38 @@ async def update_project_status(project_id: str, status: str, error_message: str
         print(f"ステータス更新エラー: {str(e)}")
 
 # 動画からスクリーンショットを生成する関数
-async def generate_screenshots(video_path: str, num_screenshots: int) -> List[str]:
+async def generate_screenshots(video_path: str, num_screenshots: int = 3) -> list:
     try:
-        screenshot_urls = []
-        for i in range(num_screenshots):
-            # スクリーンショットの生成
-            screenshot_path = os.path.join(SCREENSHOT_DIR, f"{uuid.uuid4()}.jpg")
-            
-            # FFmpegコマンドの実行
-            timestamp = i * 30  # 30秒間隔でスクリーンショットを生成
-            stream = ffmpeg.input(video_path, ss=timestamp)
-            stream = ffmpeg.output(stream, screenshot_path, vframes=1)
-            ffmpeg.run(stream)
-            
-            # Supabaseにアップロード
-            screenshot_url = await upload_to_supabase(
-                screenshot_path,
-                'image/jpeg',
-                'videos'  # バケット名を明示的に指定
-            )
-            
-            screenshot_urls.append(screenshot_url)
-            os.remove(screenshot_path)  # 一時ファイルを削除
-            
-        return screenshot_urls
+        # 動画の長さを取得
+        probe = ffmpeg.probe(video_path)
+        duration = float(probe['streams'][0]['duration'])
         
+        # スクリーンショットを撮る時間間隔を計算
+        interval = duration / (num_screenshots + 1)
+        
+        screenshots = []
+        for i in range(num_screenshots):
+            timestamp = interval * (i + 1)
+            output_path = f"/tmp/screenshots/{uuid.uuid4()}.jpg"
+            os.makedirs(os.path.dirname(output_path), exist_ok=True)
+            
+            # FFmpegでスクリーンショットを生成
+            stream = ffmpeg.input(video_path, ss=timestamp)
+            stream = ffmpeg.output(stream, output_path, vframes=1)
+            ffmpeg.run(stream, overwrite_output=True)
+            
+            # スクリーンショットをSupabaseにアップロード
+            screenshot_url = await upload_to_supabase(
+                output_path, 
+                'image/jpeg'
+            )
+            screenshots.append(screenshot_url)
+            
+            # 一時ファイルを削除
+            os.remove(output_path)
+            
+        return screenshots
     except Exception as e:
-        print(f"Error generating screenshots: {str(e)}")
         raise Exception(f"スクリーンショットの生成に失敗しました: {str(e)}")
 
 # OpenAI APIによる文字起こしと翻訳を修正
@@ -394,7 +312,7 @@ async def transcribe_and_translate(audio_file: str):
         print("Starting translation with GPT-4 Optimized (Mini)...")
         # Chat Completionsの呼び出しを修正
         translation_response = openai.chat.completions.create(  # awaitを削除
-            model=env_vars['AI_MODEL'],
+            model=ai_model,
             messages=[
                 {"role": "system", "content": "You are a professional translator. Translate the following Japanese text to English, maintaining the original meaning and nuance:"},
                 {"role": "user", "content": transcription}
@@ -484,24 +402,16 @@ async def index(request: Request):
 @app.post("/process")
 async def process_video(youtube_url: str = Form(...), num_screenshots: int = Form(3)):
     try:
-        # YouTube APIで動画情報を取得
-        video_info = await get_video_info(youtube_url)
-        
-        # 動画の長さをチェック（180秒以内）
-        if video_info['duration'] > 180:
+        # 動画の長さをチェック
+        video_info = await check_video_duration(youtube_url)
+        if not video_info['is_valid']:
             raise Exception("動画が180秒を超えています")
-            
-        # プロジェクトを作成
+
+        # プロジェクトを作成（pending状態）
         project = await save_project_to_db(
             video_url=youtube_url,
             status='pending',
-            metadata={
-                'requested_screenshots': num_screenshots,
-                'title': video_info['title'],
-                'channel': video_info['channel_title'],
-                'duration': video_info['duration'],
-                'thumbnail': video_info['thumbnail']
-            }
+            metadata={'requested_screenshots': num_screenshots}
         )
 
         try:
@@ -520,23 +430,17 @@ async def process_video(youtube_url: str = Form(...), num_screenshots: int = For
             await log_processing_status(video['id'], 'processing', '処理を開始しました')
 
             # 動画のダウンロードと保存
-            ydl_opts = await get_yt_dlp_opts()
-            print(f"Debug: Using yt-dlp options: {ydl_opts}")
-            
+            temp_video_file = f"{DOWNLOAD_DIR}/{video_info['id']}.mp4"
+            os.makedirs(DOWNLOAD_DIR, exist_ok=True)
+
             with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-                print("Debug: Attempting to extract video info...")
                 info = ydl.extract_info(youtube_url, download=True)
                 if not info:
-                    raise Exception("動画情報の取得に失敗しました")
-                print(f"Debug: Successfully extracted video info for ID: {info.get('id')}")
-                
-                # ダウンロードされたファイルのパスを取得
-                downloaded_file = os.path.join(DOWNLOAD_DIR, f"{info['id']}.mp4")
-                print(f"Debug: Downloaded file path: {downloaded_file}")
-                
+                    raise Exception("動画のダウンロードに失敗しました")
+
             # Supabaseに動画をアップロード
             video_path = await upload_to_supabase(
-                downloaded_file,
+                temp_video_file, 
                 'video/mp4',
                 'videos'
             )
@@ -547,10 +451,10 @@ async def process_video(youtube_url: str = Form(...), num_screenshots: int = For
             }).eq('id', video['id']).execute()
 
             # スクリーンショットの生成と保存
-            screenshots = await generate_screenshots(downloaded_file, num_screenshots)
+            screenshots = await generate_screenshots(temp_video_file, num_screenshots)
 
             # 文字起こしと翻訳を実行
-            transcription, translation = await transcribe_and_translate(downloaded_file)
+            transcription, translation = await transcribe_and_translate(temp_video_file)
 
             # ビデオ情報を更新
             supabase.table('videos').update({
@@ -576,7 +480,7 @@ async def process_video(youtube_url: str = Form(...), num_screenshots: int = For
             await log_processing_status(video['id'], 'completed', '処理が完了しました')
 
             # 一時ファイルの削除
-            os.remove(downloaded_file)
+            os.remove(temp_video_file)
 
             return JSONResponse({
                 'success': True,
@@ -609,21 +513,18 @@ async def auth_callback(request: Request):
     try:
         site_url = os.getenv("NEXT_PUBLIC_SITE_URL", str(request.base_url).rstrip('/'))
         
-        # 環境に応じたCookieドメインを設定
-        cookie_domain = os.getenv("COOKIE_DOMAIN", "localhost")
-        
-        # セッショントークンの取得と設定
+        # ハッシュパラメータがある場合は処理
         if "#" in str(request.url):
             return templates.TemplateResponse("index.html", {
                 "request": request,
                 "config": {
                     "SUPABASE_URL": os.getenv("SUPABASE_URL"),
                     "SUPABASE_ANON_KEY": os.getenv("SUPABASE_KEY"),
-                    "SITE_URL": site_url,
-                    "COOKIE_DOMAIN": cookie_domain
+                    "SITE_URL": site_url
                 }
             })
         
+        # ハッシュがない場合はホームにリダイレクト
         return RedirectResponse(url=site_url)
         
     except Exception as e:
@@ -661,138 +562,14 @@ async def debug_info(request: Request):
 os.makedirs(DOWNLOAD_DIR, exist_ok=True)
 os.makedirs('/tmp/outputs', exist_ok=True)
 
+# アプリケーション起動時にcookiesを設定
+import os
+
 # cookiesファイルの設定
 COOKIES_PATH = '/tmp/youtube.com_cookies.txt'
-
-# アプリケーション起動時にcookiesを設定
-def setup_cookies():
-    try:
-        cookies_str = os.getenv('YOUTUBE_COOKIES')
-        if cookies_str:
-            cookies_path = '/tmp/youtube.com_cookies.txt'
-            # Netscape形式でCookieファイルを作成
-            with open(cookies_path, 'w') as f:
-                f.write("# Netscape HTTP Cookie File\n")
-                f.write("# https://curl.haxx.se/rfc/cookie_spec.html\n")
-                f.write("# This is a generated file!  Do not edit.\n\n")
-                
-                # 各Cookieを正しい形式で書き込み
-                cookies = cookies_str.split(';')
-                for cookie in cookies:
-                    if '=' in cookie:
-                        name, value = cookie.strip().split('=', 1)
-                        f.write(f".youtube.com\tTRUE\t/\tTRUE\t2147483647\t{name}\t{value}\n")
-            
-            print(f"Debug: Cookie file created at: {cookies_path}")
-            return True
-        else:
-            print("Debug: No YOUTUBE_COOKIES environment variable found")
-            return False
-    except Exception as e:
-        print(f"Debug: Cookie setup error: {str(e)}")
-        return False
-
-# アプリケーション起動時に実行
-if setup_cookies():
-    print("Debug: YouTube cookies configured successfully")
-
-# YouTube API設定
-YOUTUBE_API_KEY = YOUTUBE_API_KEY
-
-async def get_video_info(video_url: str) -> Dict:
-    try:
-        video_id = extract_video_id(video_url)
-        print(f"Debug: Video ID: {video_id}")
-        print(f"Debug: API Key: {YOUTUBE_API_KEY}")  # 開発時のみ
-        
-        # APIキーの検証
-        if not YOUTUBE_API_KEY:
-            raise ValueError("YouTube API Key is not set")
-            
-        # YouTubeクライアントの初期化
-        try:
-            youtube = build('youtube', 'v3', developerKey=YOUTUBE_API_KEY)
-            print("Debug: YouTube client initialized successfully")
-        except Exception as e:
-            print(f"Debug: Error initializing YouTube client: {str(e)}")
-            raise
-            
-        # API呼び出し
-        try:
-            video_response = youtube.videos().list(
-                part='snippet,contentDetails,statistics',
-                id=video_id
-            ).execute()
-            print(f"Debug: API Response received: {video_response.keys()}")
-        except Exception as e:
-            print(f"Debug: API call error: {str(e)}")
-            raise
-        
-        if not video_response['items']:
-            raise Exception('Video not found')
-            
-        video_info = video_response['items'][0]
-        print(f"Debug: Retrieved video info: {video_info['snippet']['title']}")
-        
-        # ISO 8601形式の期間を秒数に変換
-        duration = video_info['contentDetails']['duration']
-        duration_seconds = parse_duration(duration)
-        
-        return {
-            'id': video_id,
-            'title': video_info['snippet']['title'],
-            'duration': duration_seconds,
-            'thumbnail': video_info['snippet']['thumbnails']['high']['url'],
-            'view_count': video_info['statistics']['viewCount'],
-            'channel_title': video_info['snippet']['channelTitle'],
-            'description': video_info['snippet']['description']
-        }
-        
-    except HttpError as e:
-        print(f"YouTube API error: {e.resp.status} {e.content}")
-        raise
-    except Exception as e:
-        print(f"Error getting video info: {str(e)}")
-        raise
-
-def parse_duration(duration: str) -> int:
-    """ISO 8601形式の期間を秒数に変換"""
-    import re
-    import isodate
-    return int(isodate.parse_duration(duration).total_seconds())
-
-async def download_video(video_url: str, video_id: str) -> str:
-    try:
-        # yt-dlpの設定を更新
-        ydl_opts = {
-            'format': 'best[ext=mp4]',
-            'outtmpl': f'{DOWNLOAD_DIR}/%(id)s.%(ext)s',
-            'quiet': False,
-            'no_warnings': False,
-            'verbose': True,
-            'cookiefile': '/tmp/youtube.com_cookies.txt',
-            'http_headers': {
-                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36',
-                'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
-                'Accept-Language': 'en-us,en;q=0.5',
-                'Sec-Fetch-Mode': 'navigate'
-            }
-        }
-        
-        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-            print("Debug: Downloading video...")
-            ydl.download([video_url])
-            
-        output_path = os.path.join(DOWNLOAD_DIR, f"{video_id}.mp4")
-        if not os.path.exists(output_path):
-            raise Exception(f"Downloaded file not found: {output_path}")
-            
-        print(f"Debug: Video downloaded successfully to {output_path}")
-        return output_path
-        
-    except Exception as e:
-        print(f"Download error: {str(e)}")
-        raise
+if os.getenv('YOUTUBE_COOKIES'):
+    with open(COOKIES_PATH, 'w') as f:
+        f.write(os.getenv('YOUTUBE_COOKIES'))
 
 if __name__ == "__main__":
     import uvicorn
