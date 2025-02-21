@@ -117,16 +117,25 @@ os.makedirs(DOWNLOAD_DIR, exist_ok=True)
 os.makedirs(SCREENSHOT_DIR, exist_ok=True)
 
 def get_yt_dlp_opts():
+    cookies_path = '/tmp/cookies.txt'
+    
+    # 環境変数からクッキーを取得して一時ファイルに保存
+    if os.getenv('YOUTUBE_COOKIES'):
+        print(f"Debug: Writing cookies to {cookies_path}")  # デバッグ用
+        with open(cookies_path, 'w') as f:
+            f.write(os.getenv('YOUTUBE_COOKIES'))
+        print(f"Debug: Cookies file exists: {os.path.exists(cookies_path)}")  # デバッグ用
+    
     return {
         'format': 'best[ext=mp4]',
         'outtmpl': f'{DOWNLOAD_DIR}/%(id)s.%(ext)s',
-        'quiet': True,
-        'no_warnings': True,
-        'cookies': '/tmp/cookies.txt',  # クッキーファイルのパス
+        'quiet': False,  # デバッグのため出力を有効化
+        'no_warnings': False,  # デバッグのため警告を表示
+        'cookies': cookies_path,
+        'verbose': True,  # 詳細なログを出力
         'extractor_args': {
             'youtube': {
-                'player_client': ['android'],  # androidクライアントを使用
-                'player_skip': ['webpage', 'config'],
+                'player_client': ['android'],
             }
         }
     }
@@ -565,14 +574,35 @@ async def debug_info(request: Request):
         "headers": dict(request.headers)
     }
 
+@app.get("/debug/env")
+async def debug_env():
+    cookies = os.getenv("YOUTUBE_COOKIES", "Not set")
+    cookies_path = '/tmp/cookies.txt'
+    
+    # クッキーファイルの内容も確認
+    cookie_content = None
+    if os.path.exists(cookies_path):
+        with open(cookies_path, 'r') as f:
+            cookie_content = f.read()
+    
+    return {
+        "youtube_cookies_exists": bool(cookies),
+        "youtube_cookies_length": len(cookies) if cookies else 0,
+        "cookies_file_exists": os.path.exists(cookies_path),
+        "cookies_file_content": cookie_content,
+        "tmp_dir_contents": os.listdir("/tmp") if os.path.exists("/tmp") else []
+    }
+
 # アプリケーション起動時にディレクトリを作成
 os.makedirs(DOWNLOAD_DIR, exist_ok=True)
 os.makedirs('/tmp/outputs', exist_ok=True)
 
 # アプリケーション起動時にクッキーファイルを作成
 if os.getenv('YOUTUBE_COOKIES'):
-    with open('/tmp/cookies.txt', 'w') as f:
+    cookies_path = '/tmp/cookies.txt'
+    with open(cookies_path, 'w') as f:
         f.write(os.getenv('YOUTUBE_COOKIES'))
+    print(f"Debug: Initial cookies file created at {cookies_path}")  # デバッグ用
 
 if __name__ == "__main__":
     import uvicorn
