@@ -116,13 +116,20 @@ SCREENSHOT_DIR = f"{TEMP_DIR}/screenshots"
 os.makedirs(DOWNLOAD_DIR, exist_ok=True)
 os.makedirs(SCREENSHOT_DIR, exist_ok=True)
 
-# yt-dlpの設定を更新
-ydl_opts = {
-    'format': 'best',
-    'cookiesfrombrowser': ('chrome',),  # Chromeのクッキーを使用
-    'verbose': True,
-    'outtmpl': os.path.join(DOWNLOAD_DIR, '%(id)s.%(ext)s'),
-}
+def get_yt_dlp_opts():
+    return {
+        'format': 'best[ext=mp4]',
+        'outtmpl': f'{DOWNLOAD_DIR}/%(id)s.%(ext)s',
+        'quiet': True,
+        'no_warnings': True,
+        'cookies': '/tmp/cookies.txt',  # クッキーファイルのパス
+        'extractor_args': {
+            'youtube': {
+                'player_client': ['android'],  # androidクライアントを使用
+                'player_skip': ['webpage', 'config'],
+            }
+        }
+    }
 
 def save_to_markdown(video_id: str, url: str, transcription: str, translation: str):
     """結果をMarkdownファイルとして保存する"""
@@ -433,7 +440,7 @@ async def process_video(youtube_url: str = Form(...), num_screenshots: int = For
             temp_video_file = f"{DOWNLOAD_DIR}/{video_info['id']}.mp4"
             os.makedirs(DOWNLOAD_DIR, exist_ok=True)
 
-            with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+            with yt_dlp.YoutubeDL(get_yt_dlp_opts()) as ydl:
                 info = ydl.extract_info(youtube_url, download=True)
                 if not info:
                     raise Exception("動画のダウンロードに失敗しました")
@@ -562,13 +569,9 @@ async def debug_info(request: Request):
 os.makedirs(DOWNLOAD_DIR, exist_ok=True)
 os.makedirs('/tmp/outputs', exist_ok=True)
 
-# アプリケーション起動時にcookiesを設定
-import os
-
-# cookiesファイルの設定
-COOKIES_PATH = '/tmp/youtube.com_cookies.txt'
+# アプリケーション起動時にクッキーファイルを作成
 if os.getenv('YOUTUBE_COOKIES'):
-    with open(COOKIES_PATH, 'w') as f:
+    with open('/tmp/cookies.txt', 'w') as f:
         f.write(os.getenv('YOUTUBE_COOKIES'))
 
 if __name__ == "__main__":
